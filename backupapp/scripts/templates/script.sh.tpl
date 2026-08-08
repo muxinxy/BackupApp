@@ -13,6 +13,8 @@ FMT="{{FMT}}"
 COMPRESS="{{COMPRESS}}"
 KEEP={{KEEP}}
 MONTHLY={{MONTHLY}}
+YEARLY={{YEARLY}}
+UNIT={{RETENTION_UNIT}}
 PW={{PW}}
 SRC="{{SRC}}"
 
@@ -42,22 +44,40 @@ do_backup() {
         ENTRIES=$(ls -1d "$DEST"/${APP}_* 2>/dev/null | sort -r)
         COUNT=0
         SEEN_MONTHS=""
+        SEEN_YEARS=""
+        CUTOFF=""
+        if [ "$UNIT" = "days" ]; then
+            CUTOFF=$(date -d "-$KEEP days" +%Y%m%d%H%M%S 2>/dev/null)
+        fi
         for E in $ENTRIES; do
-            COUNT=$((COUNT+1))
             SNAP=$(basename "$E" | sed 's/\([0-9]\{8\}_[0-9]\{6\}\).*/\1/')
-            MONTH=${SNAP%_*}
-            if [ "$COUNT" -le "$KEEP" ]; then
+            MONTH=$(printf '%s' "$SNAP" | cut -c1-6)
+            YEAR=$(printf '%s' "$SNAP" | cut -c1-4)
+            IN_WINDOW=0
+            if [ "$UNIT" = "days" ]; then
+                if [ -n "$CUTOFF" ] && [ ! "$SNAP" \< "$CUTOFF" ]; then IN_WINDOW=1; fi
+            else
+                COUNT=$((COUNT+1))
+                [ "$COUNT" -le "$KEEP" ] && IN_WINDOW=1
+            fi
+            if [ "$IN_WINDOW" = "1" ]; then
                 SEEN_MONTHS="$SEEN_MONTHS $MONTH"
+                SEEN_YEARS="$SEEN_YEARS $YEAR"
                 continue
             fi
-            if [ "$MONTHLY" != "1" ]; then
-                rm -rf "$E"
-                continue
+            if [ "$MONTHLY" = "1" ]; then
+                case " $SEEN_MONTHS " in
+                    *" $MONTH "*) ;;
+                    *) SEEN_MONTHS="$SEEN_MONTHS $MONTH"; SEEN_YEARS="$SEEN_YEARS $YEAR"; continue ;;
+                esac
             fi
-            case " $SEEN_MONTHS " in
-                *" $MONTH "*) rm -rf "$E" ;;
-                *) SEEN_MONTHS="$SEEN_MONTHS $MONTH" ;;
-            esac
+            if [ "$YEARLY" = "1" ]; then
+                case " $SEEN_YEARS " in
+                    *" $YEAR "*) ;;
+                    *) SEEN_YEARS="$SEEN_YEARS $YEAR"; SEEN_MONTHS="$SEEN_MONTHS $MONTH"; continue ;;
+                esac
+            fi
+            rm -rf "$E"
         done
     fi
     echo "backup done: $DEST/${APP}_${TS}"

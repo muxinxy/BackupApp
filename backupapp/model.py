@@ -36,6 +36,8 @@ class BackupPlan:
     destination: str = ""
     retention: int = 14
     keep_monthly: bool = True
+    retention_unit: str = "count"  # count=保留最近 N 份 | days=保留最近 N 天内的
+    keep_yearly: bool = False
     compress: bool = True
     format: str = "zip"  # zip | 7z | tar.gz
     password: str = ""   # 压缩包密码（zip AES / 7z）；空 = 无密码
@@ -43,6 +45,11 @@ class BackupPlan:
     backup_mode: str = "copy"    # copy | link（备份后源路径替换为指向 destination 的链接）
     restore_mode: str = "copy"   # copy | link（恢复时重建链接而非拷贝回源路径）
     link_type: str = "junction"  # junction | symlink
+    schedule_mode: str = "global"          # global | custom（计划任务排期：与全局一致或自定义）
+    schedule_frequency: str = "daily"      # daily | weekly | atLogon | days | hourly | minutely
+    schedule_time: str = "02:30"
+    schedule_day_of_week: int = 1          # 1=Mon .. 7=Sun（weekly 时生效）
+    schedule_interval: int = 1             # 每 N 天/小时/分钟（days/hourly/minutely 时生效）
     created_at: str = ""
     updated_at: str = ""
     last_run_at: str | None = None
@@ -57,6 +64,8 @@ class BackupPlan:
             "destination": self.destination,
             "retention": self.retention,
             "keepMonthly": self.keep_monthly,
+            "retentionUnit": self.retention_unit,
+            "keepYearly": self.keep_yearly,
             "compress": self.compress,
             "format": self.format,
             "password": self.password,
@@ -64,6 +73,11 @@ class BackupPlan:
             "backupMode": self.backup_mode,
             "restoreMode": self.restore_mode,
             "linkType": self.link_type,
+            "scheduleMode": self.schedule_mode,
+            "scheduleFrequency": self.schedule_frequency,
+            "scheduleTime": self.schedule_time,
+            "scheduleDayOfWeek": self.schedule_day_of_week,
+            "scheduleInterval": self.schedule_interval,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
             "lastRunAt": self.last_run_at,
@@ -80,6 +94,8 @@ class BackupPlan:
             destination=str(d.get("destination", "")),
             retention=int(d.get("retention", 14)),
             keep_monthly=bool(d.get("keepMonthly", True)),
+            retention_unit=str(d.get("retentionUnit", "count")),
+            keep_yearly=bool(d.get("keepYearly", False)),
             compress=bool(d.get("compress", True)),
             format=str(d.get("format", "zip")),
             password=str(d.get("password", "")),
@@ -87,6 +103,11 @@ class BackupPlan:
             backup_mode=str(d.get("backupMode", "copy")),
             restore_mode=str(d.get("restoreMode", "copy")),
             link_type=str(d.get("linkType", "junction")),
+            schedule_mode=str(d.get("scheduleMode", "global")),
+            schedule_frequency=str(d.get("scheduleFrequency", "daily")),
+            schedule_time=str(d.get("scheduleTime", "02:30")),
+            schedule_day_of_week=int(d.get("scheduleDayOfWeek", 1)),
+            schedule_interval=int(d.get("scheduleInterval", 1)),
             created_at=str(d.get("createdAt", "")),
             updated_at=str(d.get("updatedAt", "")),
             last_run_at=d.get("lastRunAt"),
@@ -164,15 +185,16 @@ class General:
 @dataclass
 class SchedulerCfg:
     enabled: bool = False
-    frequency: str = "daily"  # daily | weekly | atLogon
+    frequency: str = "daily"  # daily | weekly | atLogon | days | hourly | minutely
     time: str = "02:30"
     day_of_week: int = 1      # 1=Mon .. 7=Sun（weekly 时生效）
+    interval: int = 1         # 每 N 天/小时/分钟（days/hourly/minutely 时生效）
     args: list[str] = field(default_factory=lambda: ["backup", "--all"])
 
     def to_dict(self) -> dict:
         return {"enabled": self.enabled, "frequency": self.frequency,
                 "time": self.time, "dayOfWeek": self.day_of_week,
-                "args": list(self.args)}
+                "interval": self.interval, "args": list(self.args)}
 
     @classmethod
     def from_dict(cls, d: dict) -> "SchedulerCfg":
@@ -180,6 +202,7 @@ class SchedulerCfg:
                    frequency=str(d.get("frequency", "daily")),
                    time=str(d.get("time", "02:30")),
                    day_of_week=int(d.get("dayOfWeek", 1)),
+                   interval=int(d.get("interval", 1)),
                    args=[str(a) for a in d.get("args", ["backup", "--all"])])
 
 

@@ -86,6 +86,7 @@ QScrollBar:horizontal { background: transparent; height: 10px; }
 QScrollBar::handle:horizontal { border-radius: 5px; min-width: 30px; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QComboBox::drop-down { border: none; width: 26px; }
+QComboBox { combobox-popup: 0; } /* Fusion 菜单式弹层会无视 maxVisibleItems，强制列表式 */
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
     width: 18px;
     border: none;
@@ -110,6 +111,10 @@ QAbstractSpinBox::down-arrow, QComboBox::down-arrow {
 QSpinBox:disabled, QTimeEdit:disabled {
     color: #9aa4b1;
     background: transparent;
+    border-style: dashed;
+}
+QComboBox:disabled {
+    color: #9aa4b1;
     border-style: dashed;
 }
 QComboBox QAbstractItemView {

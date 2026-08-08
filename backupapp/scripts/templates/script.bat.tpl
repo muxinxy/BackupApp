@@ -6,13 +6,16 @@ rem   script.bat backup [-y]
 rem   script.bat restore [snapshot] [-y] [--no-prebak]
 rem     Restore backs up current config/data first by default;
 rem     --no-prebak skips it. Omit snapshot to list backups.
-rem     Retention is count-only (no monthly) in bat flavor.
+rem     Retention honors count/days + monthly/yearly via PowerShell.
 setlocal EnableExtensions EnableDelayedExpansion
 set "APP={{APP}}"
 set "DEST={{DEST}}"
 set "FMT={{FMT}}"
 set "COMPRESS={{COMPRESS}}"
 set "KEEP={{KEEP}}"
+set "MONTHLY={{MONTHLY}}"
+set "YEARLY={{YEARLY}}"
+set "UNIT={{RETENTION_UNIT}}"
 set "SRC={{SRC}}"
 
 set "ACTION=%~1"
@@ -68,12 +71,8 @@ echo backup done: %DEST%\%APP%_%TS%
 goto :eof
 
 :prune
-set "N=0"
-for /f "delims=" %%F in ('dir /b /o-d "%DEST%\%APP%_*" 2^>nul') do (
-    set /a N+=1
-    if "!N!" GTR "%KEEP%" del /q "%DEST%\%%F" >nul 2>nul
-    if "!N!" GTR "%KEEP%" if exist "%DEST%\%%F\." rd /s /q "%DEST%\%%F" >nul 2>nul
-)
+rem 保留策略统一委托 PowerShell 实现（份/天 + 每月/每年第一份）
+powershell -NoProfile -Command "& { $Dest='%DEST%'; $App='%APP%'; $Keep=[int]%KEEP%; $Unit='%UNIT%'; $Monthly='%MONTHLY%'; $Yearly='%YEARLY%'; $SeenM=@(); $SeenY=@(); $Now=Get-Date; $i=0; Get-ChildItem -Path $Dest -Filter ($App+'_*') | Sort-Object Name -Descending | ForEach-Object { $Snap=[regex]::Match($_.Name,'\d{8}_\d{6}').Value; if(-not $Snap){return}; $M=$Snap.Substring(0,6); $Y=$Snap.Substring(0,4); if($Unit -eq 'days'){ $In=((($Now-[datetime]::ParseExact($Snap,'yyyyMMdd_HHmmss',$null)).Days)-le $Keep) } else { $i++; $In=($i -le $Keep) }; if($In){$SeenM+=$M;$SeenY+=$Y;return}; if($Monthly -eq '1' -and $SeenM -notcontains $M){$SeenM+=$M;$SeenY+=$Y;return}; if($Yearly -eq '1' -and $SeenY -notcontains $Y){$SeenM+=$M;$SeenY+=$Y;return}; Remove-Item $_.FullName -Recurse -Force } }" >nul 2>nul
 goto :eof
 
 :pick

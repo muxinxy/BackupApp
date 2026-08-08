@@ -68,6 +68,8 @@ def generate(app, plan, flavor: str) -> str:
         "COMPRESS": "1" if plan.compress else "0",
         "KEEP": str(plan.retention),
         "MONTHLY": "1" if plan.keep_monthly else "0",
+        "YEARLY": "1" if plan.keep_yearly else "0",
+        "RETENTION_UNIT": plan.retention_unit or "count",
     }
     vals.update(_tokens(plan, flavor))
     for k, v in vals.items():

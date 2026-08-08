@@ -18,6 +18,8 @@ $Fmt  = "{{FMT}}"
 $Compress = "{{COMPRESS}}"
 $Keep = [int]{{KEEP}}
 $Monthly = "{{MONTHLY}}"
+$Yearly = "{{YEARLY}}"
+$Unit = "{{RETENTION_UNIT}}"
 $Src  = "{{SRC}}"
 $Srcs = @(
 {{SRCS_PS}}
@@ -34,17 +36,25 @@ function Backup-BackupApp {
         New-Item -ItemType Directory -Path $Dir -Force | Out-Null
         Copy-Item -Path $Srcs -Destination $Dir -Recurse -Force
     }
-    # 保留策略：最近 KEEP 份 + （可选）每月第一份
+    # 保留策略：最近 KEEP 份 / KEEP 天内 + 每月/每年第一份
     if ($Keep -gt 0) {
-        $Seen = @()
+        $SeenM = @()
+        $SeenY = @()
         $i = 0
+        $Now = Get-Date
         foreach ($E in (Get-ChildItem -Path $Dest -Filter "$($App)_*" | Sort-Object Name -Descending)) {
-            $i++
             $Snap = [regex]::Match($E.Name, '\d{8}_\d{6}').Value
-            $Month = $Snap.Substring(0, 6)
-            if ($i -le $Keep) { $Seen += $Month; continue }
-            if ($Monthly -ne "1") { Remove-Item $E.FullName -Recurse -Force; continue }
-            if ($Seen -notcontains $Month) { $Seen += $Month; continue }
+            $M = $Snap.Substring(0, 6)
+            $Y = $Snap.Substring(0, 4)
+            if ($Unit -eq "days") {
+                $In = ((($Now - [datetime]::ParseExact($Snap, 'yyyyMMdd_HHmmss', $null)).Days) -le $Keep)
+            } else {
+                $i++
+                $In = ($i -le $Keep)
+            }
+            if ($In) { $SeenM += $M; $SeenY += $Y; continue }
+            if ($Monthly -eq "1" -and $SeenM -notcontains $M) { $SeenM += $M; $SeenY += $Y; continue }
+            if ($Yearly -eq "1" -and $SeenY -notcontains $Y) { $SeenM += $M; $SeenY += $Y; continue }
             Remove-Item $E.FullName -Recurse -Force
         }
     }

@@ -9,7 +9,8 @@ from .. import scheduler as sched
 from ..storage import store
 
 _PROTOCOLS = ["webdav", "s3", "ftp", "sftp"]
-_FREQ_LABEL = {"daily": "每天", "weekly": "每周", "atLogon": "登录时"}
+_FREQ_LABEL = {"daily": "每天", "weekly": "每周", "days": "每N天",
+               "hourly": "每N小时", "minutely": "每N分钟", "atLogon": "登录时"}
 _FREQ_REV = {v: k for k, v in _FREQ_LABEL.items()}  # 中文 -> 英文（旧数据兼容）
 
 
@@ -179,21 +180,22 @@ class SelfBackupDialog(QDialog):
 
 
 class SchedulerGroup(QGroupBox):
-    """全局计划任务：勾选启用仅改设置，点击"注册"才创建/删除系统任务。"""
+    """全局计划任务：点击"注册"创建系统任务，"取消注册"删除。"""
 
     def __init__(self, parent=None):
         super().__init__("全局计划任务", parent)
         s = store.load_settings().scheduler
 
-        self._enabled = QCheckBox("启用")
-        self._enabled.setChecked(s.enabled)
         self._freq = QComboBox()
         for val, label in _FREQ_LABEL.items():  # 中文显示，英文存储
             self._freq.addItem(label, val)
         self._freq.setCurrentIndex(max(0, self._freq.findData(
             _FREQ_REV.get(s.frequency, s.frequency))))
-        self._freq.currentIndexChanged.connect(self._sync_day)
-        self._freq.setMaxVisibleItems(8)
+        self._freq.currentIndexChanged.connect(self._sync)
+        self._freq.setMaxVisibleItems(12)
+        self._interval = QSpinBox()
+        self._interval.setRange(1, 999)
+        self._interval.setValue(s.interval if s.interval >= 1 else 1)
         # 时间：下拉选择（每 30 分钟；保存过自定义时间则保留）
         self._time = QComboBox()
         cur = s.time or "02:30"
@@ -224,22 +226,24 @@ class SchedulerGroup(QGroupBox):
 
         main = QHBoxLayout(self)
         main.setSpacing(16)  # 组间疏
-        g0 = group(); g0.addWidget(self._enabled)
-        main.addLayout(g0)
-        g1 = group(); g1.addWidget(QLabel("频率")); g1.addWidget(self._freq)
+        g1 = group(); g1.addWidget(QLabel("频率")); g1.addWidget(self._freq); g1.addWidget(self._interval)
         main.addLayout(g1)
         g2 = group(); g2.addWidget(QLabel("时间")); g2.addWidget(self._time)
         main.addLayout(g2)
-        g3 = group(); g3.addWidget(QLabel("周几")); g3.addWidget(self._day)
+        g3 = group(); g3.addWidget(QLabel("星期")); g3.addWidget(self._day)
         main.addLayout(g3)
         main.addStretch(1)
         main.addWidget(self._apply)
         main.addWidget(self._status)
-        self._sync_day()  # 非每周时周几置灰
+        self._sync()  # 按频率联动：间隔/时间/星期
         self.refresh_status()
 
-    def _sync_day(self):
-        self._day.setEnabled(self._freq.currentData() == "weekly")
+    def _sync(self):
+        f = self._freq.currentData()
+        interval_mode = f in ("days", "hourly", "minutely")
+        self._interval.setVisible(interval_mode)
+        self._time.setEnabled(f in ("daily", "weekly"))
+        self._day.setEnabled(f == "weekly")
 
     def refresh_status(self):
         st = sched.status(store.load_settings())
@@ -251,23 +255,23 @@ class SchedulerGroup(QGroupBox):
         self._apply.setText("取消注册" if st == "registered" else "注册")
 
     def _read_form(self, cfg) -> None:
-        cfg.scheduler.enabled = self._enabled.isChecked()
         freq = self._freq.currentData()
         cfg.scheduler.frequency = _FREQ_REV.get(freq, freq)  # 兼容旧版存的中文
         cfg.scheduler.time = self._time.currentData()
         cfg.scheduler.day_of_week = self._day.currentData()
+        cfg.scheduler.interval = self._interval.value()
         store.save_settings(cfg)
 
     def _apply_clicked(self):
-        """点击注册/取消注册才操作系统任务；仅勾选启用不注册。"""
+        """点击注册/取消注册操作系统任务（按系统当前状态切换）。"""
         cfg = store.load_settings()
         self._read_form(cfg)
-        if cfg.scheduler.enabled:
-            err = sched.install(cfg)
-            if err:
-                QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
-        else:
+        if sched.status(cfg) == "registered":
             err = sched.uninstall(cfg)
             if err:
                 QMessageBox.warning(self, "计划任务", f"取消注册失败：{err}")
+        else:
+            err = sched.install(cfg)
+            if err:
+                QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
         self.refresh_status()

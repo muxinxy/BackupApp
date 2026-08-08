@@ -48,7 +48,8 @@ def run_plan(plan_key: str) -> BackupResult:
                                                   plan.password, plan.exclude)
         else:
             files, size = compress.copy_tree(srcs, entry, plan.exclude)
-        pruned = retention.prune(dest, app.id, plan.retention, plan.keep_monthly)
+        pruned = retention.prune(dest, app.id, plan.retention, plan.keep_monthly,
+                                 plan.keep_yearly, plan.retention_unit)
 
         plan.last_run_at = datetime.now().isoformat(timespec="seconds")
         plan.updated_at = plan.last_run_at
