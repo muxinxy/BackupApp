@@ -87,14 +87,29 @@ jobs:
   #   APPLE_TEAM_ID         - 团队 ID
   #   APPLE_APP_PASSWORD    - Apple ID 专用 app 密码
   notarize:
-    if: startsWith(github.ref, 'refs/tags/') && secrets.APPLE_ID != '' && secrets.MACOS_CERT_P12 != ''
+    # secrets context 不能用于 if 表达式，改在 job 内用 env 检查
+    if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: macos-latest
     steps:
+      - name: check signing secrets
+        id: check
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+        run: |
+          if [[ -n "${APPLE_ID:-}" && -n "${MACOS_CERT_P12:-}" ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
       - name: import certificate + sign + notarize
+        if: steps.check.outputs.ok == 'true'
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -121,7 +136,7 @@ jobs:
           xcrun stapler staple backupapp/backupapp
           zip -qry ../backupapp-macos-x64-signed.zip backupapp
       - name: release (signed)
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.check.outputs.ok == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/backupapp-macos-x64/../backupapp-macos-x64-signed.zip
