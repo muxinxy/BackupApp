@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "backupapp"
+version = "0.1.0"
+description = "应用配置与数据备份工具（便携，跨平台）"
+requires-python = ">=3.11"
+dependencies = [
+    "platformdirs>=4",
+    "pyzipper>=0.3.6",
+    "py7zr>=0.20",
+    "PySide6>=6.6",
+    "httpx>=0.27",
+    "boto3>=1.34",
+    "paramiko>=3.4",
+    "keyring>=24",
+]
+
+[project.scripts]
+backupapp = "backupapp.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["backupapp*"]
+
+[tool.setuptools.package-data]
+backupapp = ["scripts/templates/*.tpl"]

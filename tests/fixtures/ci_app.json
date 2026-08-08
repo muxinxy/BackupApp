@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "ci",
+  "name": "CI Test App",
+  "vendor": "",
+  "version": "",
+  "note": "workflow smoke test fixture",
+  "configPaths": ["~/ci-demo-config"],
+  "dataPaths": [],
+  "createdAt": "2026-01-01T00:00:00",
+  "plans": [
+    {
+      "id": "cfg",
+      "name": "config",
+      "enabled": true,
+      "sources": ["~/ci-demo-config"],
+      "destination": "~/ci-demo-backups",
+      "retention": 3,
+      "keepMonthly": false,
+      "compress": true,
+      "format": "zip",
+      "password": "",
+      "exclude": [],
+      "backupMode": "copy",
+      "restoreMode": "copy",
+      "linkType": "junction",
+      "createdAt": "2026-01-01T00:00:00",
+      "lastRunAt": null,
+      "lastResult": null
+    }
+  ]
+}
