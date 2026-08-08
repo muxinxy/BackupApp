@@ -5,7 +5,7 @@
   backupapp backup --plan vscode/cfg
   backupapp restore --app vscode [--snapshot 20260808_103000]
   backupapp task on|off|status
-  backupapp script --app vscode --plan cfg --kind backup --flavor ps1
+  backupapp script --app vscode --plan cfg --flavor ps1
   backupapp export --all -o out.zip
   backupapp import out.zip
   backupapp validate
@@ -128,10 +128,9 @@ def cmd_script(args) -> int:
     if not pair:
         _die(f"计划不存在: {args.app}/{args.plan_id}")
     app, plan = pair
-    content = generator.generate(app, plan, args.kind, args.flavor)
+    content = generator.generate(app, plan, args.flavor)
     if args.output:
-        with open(args.output, "w", encoding="utf-8", newline="\n") as f:
-            f.write(content)
+        generator.write_script(args.output, content)
         print(f"script -> {args.output}")
     else:
         print(content)
@@ -216,10 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     p6 = sub.add_parser("import", help="导入应用配置")
     p6.add_argument("path")
     sub.add_parser("validate", help="校验所有应用/计划配置")
-    p7 = sub.add_parser("script", help="生成备份/恢复脚本")
+    p7 = sub.add_parser("script", help="生成备份/恢复一体脚本")
     p7.add_argument("--app", required=True)
     p7.add_argument("--plan-id", required=True)
-    p7.add_argument("--kind", choices=["backup", "restore"], default="backup")
     p7.add_argument("--flavor", choices=["ps1", "bat", "sh"], default="ps1")
     p7.add_argument("-o", "--output")
     _add_app_parser(sub)

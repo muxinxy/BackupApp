@@ -206,7 +206,7 @@ class SchedulerGroup(QGroupBox):
         self._status = QLabel()
 
         row = QHBoxLayout(self)
-        row.setSpacing(8)
+        row.setSpacing(4)
         row.addWidget(self._enabled)
         row.addWidget(QLabel("频率"))
         row.addWidget(self._freq)

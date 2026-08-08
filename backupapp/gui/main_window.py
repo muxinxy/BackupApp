@@ -6,10 +6,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QBrush, QColor
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
-                               QLabel, QListWidget, QListWidgetItem, QMainWindow,
-                               QMessageBox, QPlainTextEdit, QPushButton, QSplitter,
-                               QTableWidget, QTableWidgetItem, QToolBar, QVBoxLayout,
-                               QWidget)
+                               QInputDialog, QLabel, QListWidget, QListWidgetItem,
+                               QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
+                               QSplitter, QTableWidget, QTableWidgetItem, QToolBar,
+                               QVBoxLayout, QWidget)
 
 from ..model import BackupPlan
 from ..storage import importexport, store
@@ -60,8 +60,8 @@ class MainWindow(QMainWindow):
         self.act_self_backup.triggered.connect(self._self_backup_dialog)
         self.act_self_backup_now = QAction("备份自身", self)
         self.act_self_backup_now.triggered.connect(self._self_backup_now)
-        self.act_script = QAction("生成脚本", self)
-        self.act_script.triggered.connect(self._script_dialog)
+        self.act_script = QAction("批量生成脚本", self)
+        self.act_script.triggered.connect(self._scripts_batch)
         for a in (self.act_backup_all, self.act_import, self.act_export_all,
                   self.act_self_backup, self.act_self_backup_now, self.act_script):
             tb.addAction(a)
@@ -121,10 +121,22 @@ class MainWindow(QMainWindow):
         self.plan_table.setSelectionMode(QTableWidget.SingleSelection)
         self.plan_table.setAlternatingRowColors(True)
         header = self.plan_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed)  # 启用列固定宽度
+        # 源/目的两列平铺剩余宽度；窄列固定宽度
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
         self.plan_table.setColumnWidth(0, 48)
-        for col in range(1, len(_PLAN_COLS)):
-            header.setSectionResizeMode(col, QHeaderView.Stretch)  # 其余平铺整个窗口
+        for col, (mode, w) in {
+                1: (QHeaderView.Interactive, 130),   # 名称
+                2: (QHeaderView.Stretch, 0),         # 源
+                3: (QHeaderView.Stretch, 0),         # 目的
+                4: (QHeaderView.Fixed, 70),          # 保留
+                5: (QHeaderView.Fixed, 70),          # 格式
+                6: (QHeaderView.Fixed, 115),         # 创建时间
+                7: (QHeaderView.Fixed, 115),         # 修改时间
+                8: (QHeaderView.Interactive, 140),   # 状态
+        }.items():
+            header.setSectionResizeMode(col, mode)
+            if w:
+                self.plan_table.setColumnWidth(col, w)
         self.plan_table.doubleClicked.connect(self._plan_edit)
         lay.addWidget(self.plan_table, 1)
         row = QHBoxLayout()
@@ -132,6 +144,7 @@ class MainWindow(QMainWindow):
         self.btn_restore = QPushButton("恢复")
         self.btn_plan_new = QPushButton("新增计划")
         self.btn_plan_edit = QPushButton("编辑")
+        self.btn_plan_script = QPushButton("生成脚本")
         self.btn_plan_del = QPushButton("删除计划")
         self.btn_backup.setObjectName("success")
         self.btn_restore.setObjectName("warning")
@@ -141,9 +154,10 @@ class MainWindow(QMainWindow):
         self.btn_restore.clicked.connect(self._plan_restore)
         self.btn_plan_new.clicked.connect(self._plan_new)
         self.btn_plan_edit.clicked.connect(self._plan_edit)
+        self.btn_plan_script.clicked.connect(self._script_dialog)
         self.btn_plan_del.clicked.connect(self._plan_delete)
         for b in (self.btn_backup, self.btn_restore, self.btn_plan_new,
-                  self.btn_plan_edit, self.btn_plan_del):
+                  self.btn_plan_edit, self.btn_plan_script, self.btn_plan_del):
             row.addWidget(b)
         lay.addLayout(row)
 
@@ -424,15 +438,40 @@ class MainWindow(QMainWindow):
         if not plan or not self._app_id:
             QMessageBox.information(self, "提示", "请先选择一个计划")
             return
-        src = plan.sources[0] if plan.sources else "源路径"
-        ret = QMessageBox.question(self, "恢复",
-                                   f"将把 {src} 改名为 .old 后恢复。继续？")
-        if ret != QMessageBox.Yes:
+        from ..engine import paths as epaths, retention
+        dest = epaths.expand(plan.destination)
+        entries = retention.list_entries(dest, self._app_id)
+        if not entries:
+            QMessageBox.information(
+                self, "恢复", f"{dest} 下没有 {self._app_id} 的备份")
             return
+        snaps = [retention.snapshot_of(e) for e in entries]
+        snap, ok = QInputDialog.getItem(self, "选择备份", "选择要恢复的备份:",
+                                        snaps, 0, False)
+        if not ok:
+            return
+        src = plan.sources[0] if plan.sources else "源路径"
+        mb = QMessageBox(self)
+        mb.setWindowTitle("恢复")
+        mb.setIcon(QMessageBox.Question)
+        mb.setText(f"将把 {src} 改名为 .old 后，从备份 {snap} 恢复。")
+        cb = QCheckBox("恢复前先备份当前配置/数据")
+        cb.setChecked(True)
+        mb.setCheckBox(cb)
+        mb.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        mb.exec()
+        if mb.clickedButton() is not mb.button(QMessageBox.Ok):
+            return
+        prebak = cb.isChecked()
         key = f"{self._app_id}/{plan.id}"
-        self._run_worker(f"恢复 {key}", lambda: __import__(
-            "backupapp.engine.restore", fromlist=["restore_plan"]).restore_plan(key),
-            RestoreWorker)
+
+        def _do():
+            from ..engine import backup as bk, restore as rs
+            if prebak:
+                bk.run_plan(key)  # 先备份当前状态
+            return rs.restore_plan(key, snap)
+
+        self._run_worker(f"恢复 {key}", _do, RestoreWorker)
 
     def _run_worker(self, label: str, fn, worker_cls):
         if self._workers:
@@ -480,11 +519,9 @@ class MainWindow(QMainWindow):
         self._run_worker("自身备份", run_self_backup, BackupWorker)
 
     def _script_dialog(self):
-        if not self._app_id:
-            QMessageBox.information(self, "提示", "请先选择一个应用")
-            return
+        """生成单个计划（选中）的备份/恢复一体脚本。"""
         plan = self._selected_plan()
-        if not plan:
+        if not plan or not self._app_id:
             QMessageBox.information(self, "提示", "请先选择一个计划")
             return
         app = store.load_app(self._app_id)
@@ -493,31 +530,62 @@ class MainWindow(QMainWindow):
         from ..scripts import generator
         dlg = QDialog(self)
         dlg.setWindowTitle("生成脚本")
-        kind = QComboBox()
-        kind.addItem("备份脚本", "backup")
-        kind.addItem("恢复脚本", "restore")
         flavor = QComboBox()
         flavor.addItem("Windows PowerShell (ps1)", "ps1")
         flavor.addItem("Windows 批处理 (bat)", "bat")
         flavor.addItem("Linux shell (sh)", "sh")
         form = QFormLayout(dlg)
-        form.addRow("类型", kind)
         form.addRow("平台", flavor)
+        form.addRow("", QLabel("脚本含备份与恢复功能，支持交互与 -y 静默运行"))
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         form.addRow(btns)
 
         def do_save():
             path, _ = QFileDialog.getSaveFileName(
                 dlg, "保存脚本",
-                f"{app.id}_{plan.id}_{kind.currentData()}.{flavor.currentData()}",
+                f"{app.id}_{plan.id}.{flavor.currentData()}",
                 "脚本 (*.*)")
             if not path:
                 return
-            content = generator.generate(app, plan, kind.currentData(),
-                                         flavor.currentData())
-            with open(path, "w", encoding="utf-8", newline="\n") as f:
-                f.write(content)
+            content = generator.generate(app, plan, flavor.currentData())
+            generator.write_script(path, content)
             self._log(f"脚本 -> {path}")
+            dlg.accept()
+
+        btns.accepted.connect(do_save)
+        btns.rejected.connect(dlg.reject)
+        dlg.exec()
+
+    def _scripts_batch(self):
+        """批量生成所有启用计划的备份/恢复一体脚本。"""
+        plans = [(a, p) for a in store.list_apps() for p in a.plans if p.enabled]
+        if not plans:
+            QMessageBox.information(self, "提示", "没有启用的计划")
+            return
+        from ..scripts import generator
+        dlg = QDialog(self)
+        dlg.setWindowTitle("批量生成脚本")
+        flavor = QComboBox()
+        flavor.addItem("Windows PowerShell (ps1)", "ps1")
+        flavor.addItem("Windows 批处理 (bat)", "bat")
+        flavor.addItem("Linux shell (sh)", "sh")
+        form = QFormLayout(dlg)
+        form.addRow("", QLabel(f"将为 {len(plans)} 个启用计划各生成一个脚本"))
+        form.addRow("平台", flavor)
+        form.addRow("", QLabel("脚本含备份与恢复功能，支持交互与 -y 静默运行"))
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        form.addRow(btns)
+
+        def do_save():
+            outdir = QFileDialog.getExistingDirectory(dlg, "选择保存目录")
+            if not outdir:
+                return
+            n = 0
+            for a, p in plans:
+                path = os.path.join(outdir, f"{a.id}_{p.id}.{flavor.currentData()}")
+                generator.write_script(path, generator.generate(a, p, flavor.currentData()))
+                n += 1
+            self._log(f"生成 {n} 个脚本 -> {outdir}")
             dlg.accept()
 
         btns.accepted.connect(do_save)

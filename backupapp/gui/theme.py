@@ -26,7 +26,7 @@ QToolButton {
 QGroupBox {
     border-radius: 10px;
     margin-top: 14px;
-    padding: 14px 12px 12px 12px;
+    padding: 10px 10px 8px 10px;
     font-weight: 600;
 }
 QGroupBox::title {
@@ -80,32 +80,37 @@ QScrollBar:horizontal { background: transparent; height: 10px; }
 QScrollBar::handle:horizontal { border-radius: 5px; min-width: 30px; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QComboBox::drop-down { border: none; width: 26px; }
-QSpinBox::up-button, QSpinBox::down-button {
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
     width: 18px;
     border: none;
     border-left: 1px solid palette(mid);
     background: transparent;
 }
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {
     background: rgba(127, 140, 160, 0.25);
 }
-QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed {
     background: rgba(127, 140, 160, 0.4);
 }
-QSpinBox::up-arrow, QSpinBox::down-arrow {
+QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {
     image: none;
     width: 0;
     height: 0;
 }
-QSpinBox::up-arrow {
+QAbstractSpinBox::up-arrow {
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
     border-bottom: 5px solid #475569;
 }
-QSpinBox::down-arrow {
+QAbstractSpinBox::down-arrow {
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
     border-top: 5px solid #475569;
+}
+QSpinBox:disabled, QTimeEdit:disabled {
+    color: #9aa4b1;
+    background: transparent;
+    border-style: dashed;
 }
 """
 
@@ -290,13 +295,17 @@ QListWidget::item:selected { background: #1e3a5f; color: #93c5fd; }
 QListWidget::item:hover { background: #263449; }
 QMessageBox, QFileDialog { background: #0f172a; }
 QScrollBar::handle:vertical, QScrollBar::handle:horizontal { background: #475569; }
-QSpinBox::up-arrow { border-bottom-color: #94a3b8; }
-QSpinBox::down-arrow { border-top-color: #94a3b8; }
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+QAbstractSpinBox::up-arrow { border-bottom-color: #94a3b8; }
+QAbstractSpinBox::down-arrow { border-top-color: #94a3b8; }
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {
     background: rgba(148, 163, 184, 0.2);
 }
-QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed {
     background: rgba(148, 163, 184, 0.35);
+}
+QSpinBox:disabled, QTimeEdit:disabled {
+    color: #475569;
+    border-color: #334155;
 }
 """
 

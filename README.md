@@ -9,7 +9,10 @@
 - **压缩与加密**：zip（AES）/ 7z / tar.gz，可选压缩包密码
 - **保留策略**：按天数保留 + 每月快照保留
 - **计划任务**：内置调度器，可开关、查看状态，也可生成独立的计划任务脚本
-- **脚本生成**：一键生成独立的备份/恢复脚本（bat / ps1 / sh），不依赖本工具即可执行
+- **脚本生成**：生成独立的备份/恢复一体脚本（bat / ps1 / sh），不依赖本工具即可执行，支持交互式与参数静默运行：
+  - `script.ps1` → 交互式选择操作
+  - `script.ps1 backup -y` → 静默备份
+  - `script.ps1 restore -y [-Snapshot 名称] [-NoPrebak]` → 静默恢复（默认先备份当前配置，可指定快照）
 - **凭据安全**：DPAPI（Windows 原生加密）/ keyring（跨平台 OS 凭据库）/ plain 三种存储方式
 - **导入 / 导出**：配置整体导出为 zip 并可重新导入迁移
 
@@ -39,8 +42,8 @@ backupapp restore --app vscode [--snapshot 20260808_103000]
 # 计划任务开关
 backupapp task on|off|status
 
-# 生成独立备份脚本
-backupapp script --app vscode --plan cfg --kind backup --flavor ps1
+# 生成独立备份/恢复一体脚本（含备份与恢复，支持交互与 -y 静默）
+backupapp script --app vscode --plan cfg --flavor ps1
 
 # 导出 / 导入配置
 backupapp export --all -o out.zip

@@ -53,7 +53,7 @@ jobs:
         run: |
           ./dist/backupapp/backupapp-cli --version
           ./dist/backupapp/backupapp-cli import tests/fixtures/ci_app.json
-          ./dist/backupapp/backupapp-cli script --app ci --plan-id cfg --kind backup --flavor sh | head -n 3
+          ./dist/backupapp/backupapp-cli script --app ci --plan-id cfg --flavor sh | head -n 3
 
       - name: package
         shell: bash
