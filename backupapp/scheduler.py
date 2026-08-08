@@ -26,23 +26,35 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
 
 # ---- Windows ----
 
+_WIN_DAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+
+
 def _win_sc(cfg) -> list[str]:
     s = cfg.scheduler
     if s.frequency == "atLogon":
         return ["/sc", "onlogon"]
     if s.frequency == "weekly":
-        return ["/sc", "weekly", "/st", s.time, "/d", str(s.day_of_week)]
+        # schtasks /d 接受英文缩写（中文本地化下数字 1-7 报"值无效"）
+        day = _WIN_DAYS[max(0, min(6, s.day_of_week - 1))]
+        return ["/sc", "weekly", "/st", s.time, "/d", day]
     return ["/sc", "daily", "/st", s.time]
 
 
-def _win_install(cfg) -> bool:
+def _win_install(cfg) -> str:
     cmd = ["schtasks", "/create", "/tn", TASK_NAME, "/tr", app_command(cfg),
            "/f"] + _win_sc(cfg)
-    return _run(cmd).returncode == 0
+    r = _run(cmd)
+    if r.returncode == 0:
+        return ""
+    err = (r.stderr or r.stdout or "未知错误").strip()
+    if cfg.scheduler.frequency == "atLogon":
+        err += "（登录时任务需要以管理员身份运行）"
+    return err
 
 
-def _win_uninstall() -> bool:
-    return _run(["schtasks", "/delete", "/tn", TASK_NAME, "/f"]).returncode == 0
+def _win_uninstall() -> str:
+    r = _run(["schtasks", "/delete", "/tn", TASK_NAME, "/f"])
+    return "" if r.returncode == 0 else (r.stderr or "删除失败").strip()
 
 
 def _win_status(cfg) -> str:
@@ -84,20 +96,19 @@ def _mac_plist_path() -> str:
     return os.path.expanduser(f"~/Library/LaunchAgents/{TASK_NAME}.plist")
 
 
-def _mac_install(cfg) -> bool:
+def _mac_install(cfg) -> str:
     p = _mac_plist_path()
     with open(p, "w", encoding="utf-8") as f:
         f.write(_mac_plist(cfg))
     r = _run(["launchctl", "load", "-w", p])
-    return r.returncode == 0
+    return "" if r.returncode == 0 else "launchctl load 失败"
 
 
-def _mac_uninstall() -> bool:
-    p = _mac_plist_path()
-    _run(["launchctl", "unload", p])
+def _mac_uninstall() -> str:
+    _run(["launchctl", "unload", p := _mac_plist_path()])
     if os.path.exists(p):
         os.remove(p)
-    return True
+    return ""
 
 
 def _mac_status(cfg) -> str:
@@ -129,15 +140,15 @@ def _write_crontab(lines: list[str]) -> bool:
     return r.returncode == 0
 
 
-def _linux_install(cfg) -> bool:
+def _linux_install(cfg) -> str:
     lines = [ln for ln in _crontab_lines() if TASK_NAME not in ln]
     lines.append(_cron_line(cfg))
-    return _write_crontab(lines)
+    return "" if _write_crontab(lines) else "crontab 写入失败"
 
 
-def _linux_uninstall() -> bool:
+def _linux_uninstall() -> str:
     lines = [ln for ln in _crontab_lines() if TASK_NAME not in ln]
-    return _write_crontab(lines)
+    return "" if _write_crontab(lines) else "crontab 写入失败"
 
 
 def _linux_status(cfg) -> str:
@@ -146,32 +157,34 @@ def _linux_status(cfg) -> str:
 
 # ---- 统一入口 ----
 
-def install(cfg) -> bool:
+def install(cfg) -> str:
+    """注册计划任务。返回空串 = 成功，否则为错误信息。"""
     if sys.platform == "win32":
-        ok = _win_install(cfg)
+        err = _win_install(cfg)
     elif sys.platform == "darwin":
-        ok = _mac_install(cfg)
+        err = _mac_install(cfg)
     else:
-        ok = _linux_install(cfg)
-    if ok:
+        err = _linux_install(cfg)
+    if not err:
         cfg.scheduler_registered = True
         from .storage import store
         store.save_settings(cfg)
-    return ok
+    return err
 
 
-def uninstall(cfg) -> bool:
+def uninstall(cfg) -> str:
+    """取消注册。返回空串 = 成功，否则为错误信息。"""
     if sys.platform == "win32":
-        ok = _win_uninstall()
+        err = _win_uninstall()
     elif sys.platform == "darwin":
-        ok = _mac_uninstall()
+        err = _mac_uninstall()
     else:
-        ok = _linux_uninstall()
-    if ok:
+        err = _linux_uninstall()
+    if not err:
         cfg.scheduler_registered = False
         from .storage import store
         store.save_settings(cfg)
-    return ok
+    return err
 
 
 def status(cfg) -> str:

@@ -24,7 +24,9 @@ if sys.platform == "win32":
     icon = os.path.join(ROOT, "packaging", "icons", "backupapp.ico")
 
 datas = [(os.path.join(ROOT, "backupapp", "scripts", "templates"),
-          os.path.join("backupapp", "scripts", "templates"))]
+          os.path.join("backupapp", "scripts", "templates")),
+         (os.path.join(ROOT, "backupapp", "gui", "icons"),
+          os.path.join("backupapp", "gui", "icons"))]
 binaries = []
 hiddenimports = [
     "backupapp.engine.backup",

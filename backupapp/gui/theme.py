@@ -117,8 +117,8 @@ QComboBox QAbstractItemView {
     padding: 6px;
 }
 QComboBox QAbstractItemView::item {
-    padding: 6px 10px;
-    min-height: 22px;
+    padding: 8px 10px;
+    min-height: 26px;
 }
 """
 

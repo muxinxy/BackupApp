@@ -193,6 +193,7 @@ class SchedulerGroup(QGroupBox):
         self._freq.setCurrentIndex(max(0, self._freq.findData(
             _FREQ_REV.get(s.frequency, s.frequency))))
         self._freq.currentIndexChanged.connect(self._sync_day)
+        self._freq.setMaxVisibleItems(8)
         # 时间：下拉选择（每 30 分钟；保存过自定义时间则保留）
         self._time = QComboBox()
         cur = s.time or "02:30"
@@ -247,6 +248,7 @@ class SchedulerGroup(QGroupBox):
         color = "green" if st == "registered" else "gray"
         self._status.setText(f"状态: {text}")
         self._status.setStyleSheet(f"color: {color};")
+        self._apply.setText("取消注册" if st == "registered" else "注册")
 
     def _read_form(self, cfg) -> None:
         cfg.scheduler.enabled = self._enabled.isChecked()
@@ -257,12 +259,15 @@ class SchedulerGroup(QGroupBox):
         store.save_settings(cfg)
 
     def _apply_clicked(self):
-        """点击注册才创建/删除系统任务；仅勾选启用不注册。"""
+        """点击注册/取消注册才操作系统任务；仅勾选启用不注册。"""
         cfg = store.load_settings()
         self._read_form(cfg)
         if cfg.scheduler.enabled:
-            if not sched.install(cfg):
-                QMessageBox.warning(self, "计划任务", "注册失败")
+            err = sched.install(cfg)
+            if err:
+                QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
         else:
-            sched.uninstall(cfg)
+            err = sched.uninstall(cfg)
+            if err:
+                QMessageBox.warning(self, "计划任务", f"取消注册失败：{err}")
         self.refresh_status()

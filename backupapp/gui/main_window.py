@@ -456,7 +456,7 @@ class MainWindow(QMainWindow):
         dlg.setWindowTitle("选择备份")
         combo = QComboBox()
         combo.addItems(snaps)
-        combo.setMaxVisibleItems(12)
+        combo.setMaxVisibleItems(15)
         combo.setMinimumWidth(340)
         combo.setCurrentIndex(0)
         lay = QVBoxLayout(dlg)

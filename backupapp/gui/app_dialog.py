@@ -28,11 +28,6 @@ class AppDialog(QDialog):
         self._data_paths = PathListEditor()
         self._data_paths.set_paths(app.data_paths if app else [])
 
-        # 名称默认跟随 ID（仅在名称为空时同步）
-        if not app:
-            self._id.textChanged.connect(
-                lambda t: self._name.setText(t) if not self._name.text() else None)
-
         form = QFormLayout()
         form.addRow("ID", self._id)
         form.addRow("名称", self._name)
