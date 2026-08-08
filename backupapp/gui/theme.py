@@ -15,13 +15,13 @@ _COMMON = """
     font-size: 10pt;
 }
 QToolBar {
-    spacing: 6px;
-    padding: 6px 10px;
+    spacing: 2px;
+    padding: 2px 6px;
 }
 QToolButton {
     border: none;
-    border-radius: 7px;
-    padding: 6px 12px;
+    border-radius: 6px;
+    padding: 3px 8px;
 }
 QGroupBox {
     border-radius: 10px;
@@ -80,6 +80,33 @@ QScrollBar:horizontal { background: transparent; height: 10px; }
 QScrollBar::handle:horizontal { border-radius: 5px; min-width: 30px; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QComboBox::drop-down { border: none; width: 26px; }
+QSpinBox::up-button, QSpinBox::down-button {
+    width: 18px;
+    border: none;
+    border-left: 1px solid palette(mid);
+    background: transparent;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background: rgba(127, 140, 160, 0.25);
+}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+    background: rgba(127, 140, 160, 0.4);
+}
+QSpinBox::up-arrow, QSpinBox::down-arrow {
+    image: none;
+    width: 0;
+    height: 0;
+}
+QSpinBox::up-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid #475569;
+}
+QSpinBox::down-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #475569;
+}
 """
 
 LIGHT = _COMMON + """
@@ -263,6 +290,14 @@ QListWidget::item:selected { background: #1e3a5f; color: #93c5fd; }
 QListWidget::item:hover { background: #263449; }
 QMessageBox, QFileDialog { background: #0f172a; }
 QScrollBar::handle:vertical, QScrollBar::handle:horizontal { background: #475569; }
+QSpinBox::up-arrow { border-bottom-color: #94a3b8; }
+QSpinBox::down-arrow { border-top-color: #94a3b8; }
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background: rgba(148, 163, 184, 0.2);
+}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+    background: rgba(148, 163, 184, 0.35);
+}
 """
 
 

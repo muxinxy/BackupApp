@@ -1,5 +1,6 @@
 """备份计划新增/编辑对话框。"""
 
+import os
 from datetime import datetime
 
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -7,6 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
                                QSpinBox, QVBoxLayout)
 
+from ..engine.paths import compact
 from ..model import AppConfig, BackupPlan, now_iso
 from .widgets import PathListEditor
 
@@ -122,7 +124,12 @@ class PlanDialog(QDialog):
         p.id = self._id.text().strip()
         p.name = self._name.text().strip()
         p.sources = self._sources.paths()
-        p.destination = self._destination.text().strip()
+        dest = self._destination.text().strip()
+        # 本地绝对路径统一分隔符并变量化（与源路径一致）；协议/相对路径原样保留
+        if dest and os.path.isabs(os.path.expandvars(dest)):
+            p.destination = compact(dest)
+        else:
+            p.destination = dest
         p.retention = self._retention.value()
         p.keep_monthly = self._keep_monthly.isChecked()
         p.compress = self._compress.isChecked()

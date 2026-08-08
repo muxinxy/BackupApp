@@ -244,9 +244,17 @@ class MainWindow(QMainWindow):
                       str(plan.retention) + ("/月" if plan.keep_monthly else ""),
                       fmt, _fmt_ts(plan.created_at), _fmt_ts(plan.updated_at),
                       status]
+            # 悬停显示完整内容：源路径列展示全部源路径，其余列展示单元格全文
+            tips = [plan.name,
+                    "\n".join(plan.sources) if plan.sources else "",
+                    plan.destination,
+                    values[3], values[4], values[5], values[6], status]
             for col, v in enumerate(values, start=1):
                 item = QTableWidgetItem(v)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                tip = tips[col - 1]
+                if tip:
+                    item.setToolTip(tip)
                 if col == len(_PLAN_COLS) - 1:  # 状态列着色
                     from . import theme
                     if color_kind:
