@@ -1,10 +1,9 @@
 """自身备份设置对话框 + 全局计划任务控件。"""
 
-from PySide6.QtCore import QTime
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QLineEdit, QMessageBox, QPushButton, QSpinBox,
-                               QTimeEdit, QVBoxLayout)
+                               QVBoxLayout)
 
 from .. import scheduler as sched
 from ..storage import store
@@ -180,7 +179,7 @@ class SelfBackupDialog(QDialog):
 
 
 class SchedulerGroup(QGroupBox):
-    """全局计划任务：启用开关即创建/删除系统任务（幂等）。"""
+    """全局计划任务：勾选启用仅改设置，点击"注册"才创建/删除系统任务。"""
 
     def __init__(self, parent=None):
         super().__init__("全局计划任务", parent)
@@ -194,14 +193,22 @@ class SchedulerGroup(QGroupBox):
         self._freq.setCurrentIndex(max(0, self._freq.findData(
             _FREQ_REV.get(s.frequency, s.frequency))))
         self._freq.currentIndexChanged.connect(self._sync_day)
-        hh, mm = (s.time or "02:30").split(":")
-        self._time = QTimeEdit()
-        self._time.setTime(QTime(int(hh), int(mm)))
-        self._day = QSpinBox()
-        self._day.setRange(1, 7)
-        self._day.setValue(s.day_of_week)
-        self._day.setToolTip("1=周一 .. 7=周日")
-        self._apply = QPushButton("应用")
+        # 时间：下拉选择（每 30 分钟；保存过自定义时间则保留）
+        self._time = QComboBox()
+        cur = s.time or "02:30"
+        if cur not in {f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)}:
+            self._time.addItem(cur, cur)
+        for h in range(24):
+            for m in (0, 30):
+                t = f"{h:02d}:{m:02d}"
+                self._time.addItem(t, t)
+        self._time.setCurrentIndex(self._time.findData(cur))
+        # 周几：下拉选择
+        self._day = QComboBox()
+        for d in range(1, 8):
+            self._day.addItem(f"周{'一二三四五六日'[d - 1]}", d)
+        self._day.setCurrentIndex(s.day_of_week - 1 if 1 <= s.day_of_week <= 7 else 0)
+        self._apply = QPushButton("注册")
         self._apply.clicked.connect(self._apply_clicked)
         self._status = QLabel()
 
@@ -211,8 +218,8 @@ class SchedulerGroup(QGroupBox):
             return g
 
         self._freq.setMinimumWidth(110)
-        self._time.setMinimumWidth(90)
-        self._day.setMinimumWidth(56)
+        self._time.setMinimumWidth(100)
+        self._day.setMinimumWidth(76)
 
         main = QHBoxLayout(self)
         main.setSpacing(16)  # 组间疏
@@ -228,7 +235,6 @@ class SchedulerGroup(QGroupBox):
         main.addWidget(self._apply)
         main.addWidget(self._status)
         self._sync_day()  # 非每周时周几置灰
-        self._enabled.toggled.connect(self._toggle)
         self.refresh_status()
 
     def _sync_day(self):
@@ -246,26 +252,17 @@ class SchedulerGroup(QGroupBox):
         cfg.scheduler.enabled = self._enabled.isChecked()
         freq = self._freq.currentData()
         cfg.scheduler.frequency = _FREQ_REV.get(freq, freq)  # 兼容旧版存的中文
-        cfg.scheduler.time = self._time.time().toString("HH:mm")
-        cfg.scheduler.day_of_week = self._day.value()
+        cfg.scheduler.time = self._time.currentData()
+        cfg.scheduler.day_of_week = self._day.currentData()
         store.save_settings(cfg)
 
-    def _toggle(self, checked: bool):
-        cfg = store.load_settings()
-        self._read_form(cfg)
-        ok = sched.install(cfg) if checked else sched.uninstall(cfg)
-        if not ok:
-            QMessageBox.warning(self, "计划任务",
-                                "创建失败" if checked else "删除失败")
-            self._enabled.blockSignals(True)
-            self._enabled.setChecked(not checked)
-            self._enabled.blockSignals(False)
-        self.refresh_status()
-
     def _apply_clicked(self):
+        """点击注册才创建/删除系统任务；仅勾选启用不注册。"""
         cfg = store.load_settings()
         self._read_form(cfg)
         if cfg.scheduler.enabled:
             if not sched.install(cfg):
-                QMessageBox.warning(self, "计划任务", "更新失败")
+                QMessageBox.warning(self, "计划任务", "注册失败")
+        else:
+            sched.uninstall(cfg)
         self.refresh_status()

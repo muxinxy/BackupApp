@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QBrush, QColor
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
-                               QInputDialog, QLabel, QListWidget, QListWidgetItem,
+                               QLabel, QListWidget, QListWidgetItem,
                                QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
                                QSplitter, QTableWidget, QTableWidgetItem, QToolBar,
                                QVBoxLayout, QWidget)
@@ -451,10 +451,24 @@ class MainWindow(QMainWindow):
                 self, "恢复", f"{dest} 下没有 {self._app_id} 的备份")
             return
         snaps = [retention.snapshot_of(e) for e in entries]
-        snap, ok = QInputDialog.getItem(self, "选择备份", "选择要恢复的备份:",
-                                        snaps, 0, False)
-        if not ok:
+        # 自定义对话框：备份列表下拉可一次显示多项
+        dlg = QDialog(self)
+        dlg.setWindowTitle("选择备份")
+        combo = QComboBox()
+        combo.addItems(snaps)
+        combo.setMaxVisibleItems(12)
+        combo.setMinimumWidth(340)
+        combo.setCurrentIndex(0)
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("选择要恢复的备份:"))
+        lay.addWidget(combo)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addWidget(btns)
+        if dlg.exec() != QDialog.Accepted:
             return
+        snap = combo.currentText()
         src = plan.sources[0] if plan.sources else "源路径"
         mb = QMessageBox(self)
         mb.setWindowTitle("恢复")
