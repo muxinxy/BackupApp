@@ -187,6 +187,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout = open(os.devnull, "w", encoding="utf-8")
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    # Windows 控制台默认 cp1252，强制 UTF-8 输出，避免打印中文模板/日志崩溃
+    for _s in (sys.stdout, sys.stderr):
+        if _s is not None:
+            _s.reconfigure(encoding="utf-8", errors="replace")
 
     p = argparse.ArgumentParser(prog="backupapp", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
