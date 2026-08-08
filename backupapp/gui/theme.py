@@ -4,10 +4,16 @@
 main_window 的状态列颜色按它取 status_color()。
 """
 
+import os
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 current = "light"
+
+# QSS url() 需要绝对路径（Windows 下用正斜杠）
+_ICONS_URL = (Path(__file__).parent / "icons").resolve().as_posix()
 
 _COMMON = """
 * {
@@ -92,25 +98,27 @@ QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {
 QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed {
     background: rgba(127, 140, 160, 0.4);
 }
-QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {
-    image: none;
-    width: 0;
-    height: 0;
+QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow,
+QComboBox::down-arrow {
+    image: url({{ICONS}}/up_dark.png);
+    width: 10px;
+    height: 6px;
 }
-QAbstractSpinBox::up-arrow {
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid #475569;
-}
-QAbstractSpinBox::down-arrow {
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid #475569;
+QAbstractSpinBox::down-arrow, QComboBox::down-arrow {
+    image: url({{ICONS}}/down_dark.png);
 }
 QSpinBox:disabled, QTimeEdit:disabled {
     color: #9aa4b1;
     background: transparent;
     border-style: dashed;
+}
+QComboBox QAbstractItemView {
+    min-width: 220px;
+    padding: 6px;
+}
+QComboBox QAbstractItemView::item {
+    padding: 6px 10px;
+    min-height: 22px;
 }
 """
 
@@ -295,8 +303,10 @@ QListWidget::item:selected { background: #1e3a5f; color: #93c5fd; }
 QListWidget::item:hover { background: #263449; }
 QMessageBox, QFileDialog { background: #0f172a; }
 QScrollBar::handle:vertical, QScrollBar::handle:horizontal { background: #475569; }
-QAbstractSpinBox::up-arrow { border-bottom-color: #94a3b8; }
-QAbstractSpinBox::down-arrow { border-top-color: #94a3b8; }
+QAbstractSpinBox::up-arrow { image: url({{ICONS}}/up_light.png); }
+QAbstractSpinBox::down-arrow, QComboBox::down-arrow {
+    image: url({{ICONS}}/down_light.png);
+}
 QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {
     background: rgba(148, 163, 184, 0.2);
 }
@@ -324,7 +334,8 @@ def apply_theme(app, name: str) -> None:
         name = "dark" if detect_dark(app) else "light"
     current = name
     app.setStyle("Fusion")
-    app.setStyleSheet(DARK if name == "dark" else LIGHT)
+    qss = (DARK if name == "dark" else LIGHT).replace("{{ICONS}}", _ICONS_URL)
+    app.setStyleSheet(qss)
 
 
 def status_color(kind: str) -> QColor:

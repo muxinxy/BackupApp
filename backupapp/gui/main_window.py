@@ -1,6 +1,7 @@
 """主窗口：应用列表 + 计划表格 + 日志面板 + 工具栏（调度/自身备份/脚本）。"""
 
 import os
+from datetime import datetime
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QBrush, QColor
@@ -344,8 +345,10 @@ class MainWindow(QMainWindow):
     def _export_selected(self):
         if not self._app_id:
             return
+        stamp = datetime.now().strftime("%Y%m%d_%H%M")
         path, _ = QFileDialog.getSaveFileName(self, "导出应用配置",
-                                              f"{self._app_id}.json", "JSON (*.json)")
+                                              f"{self._app_id}_{stamp}.json",
+                                              "JSON (*.json)")
         if not path:
             return
         app = store.load_app(self._app_id)
@@ -354,8 +357,10 @@ class MainWindow(QMainWindow):
             self._log(f"导出 {app.id} -> {path}")
 
     def _export_all(self):
+        stamp = datetime.now().strftime("%Y%m%d_%H%M")
         path, _ = QFileDialog.getSaveFileName(self, "导出全部应用配置",
-                                              "backupapp_export.zip", "ZIP (*.zip)")
+                                              f"backupapp_export_{stamp}.zip",
+                                              "ZIP (*.zip)")
         if not path:
             return
         ids = importexport.export_all(path)
@@ -454,7 +459,7 @@ class MainWindow(QMainWindow):
         mb = QMessageBox(self)
         mb.setWindowTitle("恢复")
         mb.setIcon(QMessageBox.Question)
-        mb.setText(f"将把 {src} 改名为 .old 后，从备份 {snap} 恢复。")
+        mb.setText(f"将从备份 {snap} 恢复 {src}。")
         cb = QCheckBox("恢复前先备份当前配置/数据")
         cb.setChecked(True)
         mb.setCheckBox(cb)

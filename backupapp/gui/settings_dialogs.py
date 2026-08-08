@@ -205,17 +205,28 @@ class SchedulerGroup(QGroupBox):
         self._apply.clicked.connect(self._apply_clicked)
         self._status = QLabel()
 
-        row = QHBoxLayout(self)
-        row.setSpacing(4)
-        row.addWidget(self._enabled)
-        row.addWidget(QLabel("频率"))
-        row.addWidget(self._freq)
-        row.addWidget(QLabel("时间"))
-        row.addWidget(self._time)
-        row.addWidget(QLabel("周几"))
-        row.addWidget(self._day)
-        row.addWidget(self._apply)
-        row.addWidget(self._status)
+        def group():
+            g = QHBoxLayout()
+            g.setSpacing(2)  # 组内紧凑
+            return g
+
+        self._freq.setMinimumWidth(110)
+        self._time.setMinimumWidth(90)
+        self._day.setMinimumWidth(56)
+
+        main = QHBoxLayout(self)
+        main.setSpacing(16)  # 组间疏
+        g0 = group(); g0.addWidget(self._enabled)
+        main.addLayout(g0)
+        g1 = group(); g1.addWidget(QLabel("频率")); g1.addWidget(self._freq)
+        main.addLayout(g1)
+        g2 = group(); g2.addWidget(QLabel("时间")); g2.addWidget(self._time)
+        main.addLayout(g2)
+        g3 = group(); g3.addWidget(QLabel("周几")); g3.addWidget(self._day)
+        main.addLayout(g3)
+        main.addStretch(1)
+        main.addWidget(self._apply)
+        main.addWidget(self._status)
         self._sync_day()  # 非每周时周几置灰
         self._enabled.toggled.connect(self._toggle)
         self.refresh_status()
