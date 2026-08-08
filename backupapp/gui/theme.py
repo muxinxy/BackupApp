@@ -7,10 +7,46 @@ main_window 的状态列颜色按它取 status_color()。
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QComboBox,
+                               QScrollArea)
 
 current = "light"
+
+_WHEEL_GUARD_INSTALLED = False
+
+
+class _WheelGuard(QObject):
+    """滚轮防误触：
+    - 非编辑下拉框一律忽略滚轮（改值靠展开弹层，滚轮只会误触）；
+    - 数值框仅在未聚焦时忽略滚轮（聚焦后滚轮步进是正常交互）。
+    被拦截的滚轮转发给最近的滚动区，让页面继续滚动而不是停在控件上。
+    """
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.Wheel:
+            return False
+        blocked = (isinstance(obj, QComboBox) and not obj.isEditable()) or \
+                  (isinstance(obj, QAbstractSpinBox) and not obj.hasFocus())
+        if not blocked:
+            return False
+        # 转发给外层滚动区，保持页面可滚动
+        p = obj.parent()
+        while p is not None:
+            if isinstance(p, QScrollArea):
+                QApplication.sendEvent(p.viewport(), event)
+                break
+            p = p.parent()
+        return True
+
+
+def install_wheel_guard(app) -> None:
+    global _WHEEL_GUARD_INSTALLED
+    if _WHEEL_GUARD_INSTALLED:
+        return
+    _WHEEL_GUARD_INSTALLED = True
+    app.installEventFilter(_WheelGuard(app))
 
 # QSS url() 需要绝对路径（Windows 下用正斜杠）
 _ICONS_URL = (Path(__file__).parent / "icons").resolve().as_posix()
@@ -335,6 +371,7 @@ def detect_dark(app) -> bool:
 def apply_theme(app, name: str) -> None:
     """name: light | dark | system。更新全局样式与 current。"""
     global current
+    install_wheel_guard(app)
     if name == "system":
         name = "dark" if detect_dark(app) else "light"
     current = name

@@ -46,7 +46,10 @@ def plan_task_name(app_id: str, plan_id: str) -> str:
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True)
+    kwargs = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # 避免从 GUI 弹出终端
+    return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
 
 
 # ---- Windows ----
@@ -174,8 +177,11 @@ def _crontab_lines() -> list[str]:
 
 
 def _write_crontab(lines: list[str]) -> bool:
+    kwargs = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     r = subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n",
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, **kwargs)
     return r.returncode == 0
 
 

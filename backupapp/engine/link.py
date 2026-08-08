@@ -38,8 +38,9 @@ def create_link(source: str, target: str, link_type: str) -> None:
     """source 必须是尚不存在的路径；target 应为绝对路径。"""
     if sys.platform == "win32":
         kind = "J" if link_type == "junction" else "D"
+        flags = 0x08000000  # CREATE_NO_WINDOW：避免从 GUI 弹出终端
         r = subprocess.run(["cmd", "/c", "mklink", f"/{kind}", source, target],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, creationflags=flags)
         if r.returncode != 0:
             raise RuntimeError(f"创建链接失败: {r.stderr.strip() or r.stdout.strip()}")
     else:
