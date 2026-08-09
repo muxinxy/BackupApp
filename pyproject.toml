@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "backupapp"
 version = "1.0.0"
 description = "应用配置与数据备份工具（便携，跨平台）"
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "platformdirs>=4",

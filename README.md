@@ -18,6 +18,17 @@
 
 ## 安装
 
+### Scoop（Windows，推荐）
+
+```bash
+scoop bucket add mxy https://github.com/muxinxy/scoop-bucket
+scoop install mxy/backupapp
+```
+
+安装后开始菜单出现 **BackupApp** 快捷方式（GUI），命令行可用 `backupapp`（即 `backupapp-cli.exe`）。配置与数据保存在 `backupapp\data`，已配置 persist，`scoop update` 升级不丢失。
+
+### 源码运行
+
 要求 Python >= 3.11。
 
 ```bash
