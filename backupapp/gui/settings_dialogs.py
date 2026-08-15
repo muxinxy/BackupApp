@@ -1,8 +1,10 @@
 """自身备份设置对话框 + 全局计划任务控件。"""
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                               QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QMessageBox, QPushButton, QSpinBox,
+                               QFormLayout, QGroupBox, QHBoxLayout, QHeaderView,
+                               QLabel, QLineEdit, QMessageBox, QPushButton,
+                               QSpinBox, QTableWidget, QTableWidgetItem,
                                QVBoxLayout)
 
 from .. import scheduler as sched
@@ -15,51 +17,41 @@ _FREQ_REV = {v: k for k, v in _FREQ_LABEL.items()}  # 中文 -> 英文（旧数�
 
 
 class SelfBackupDialog(QDialog):
-    """自身备份配置。协议模块（webdav/s3/ftp/sftp）下一阶段实现。"""
+    """自身备份配置。每个协议独立保存（settings.json -> selfBackups[protocol]）。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("自身备份设置")
         self.setMinimumWidth(460)
-        sb = store.load_settings().self_backup
-        self._old_sb = sb
-
-        self._enabled = QCheckBox("启用自身备份")
-        self._enabled.setChecked(sb.enabled)
+        cfg = store.load_settings()
         self._protocol = QComboBox()
         self._protocol.addItems(_PROTOCOLS)
-        self._protocol.setCurrentText(sb.protocol or "webdav")
-        self._host = QLineEdit(sb.host)
-        self._port = QLineEdit(str(sb.port) if sb.port else "")
-        self._remote_path = QLineEdit(sb.remote_path)
-        self._username = QLineEdit(sb.username)
-        self._password = QLineEdit(sb.password if sb.credential_store == "plain" else "")
+        self._old_sb = cfg.sb("webdav")
+        self._current_proto = "webdav"
+
+        self._enabled = QCheckBox("启用自身备份")
+        self._host = QLineEdit()
+        self._port = QLineEdit()
+        self._remote_path = QLineEdit()
+        self._username = QLineEdit()
+        self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.Password)
-        if sb.credential_store != "plain":
-            self._password.setPlaceholderText("已加密存储，留空保持原值")
-        self._bucket = QLineEdit(sb.bucket)
-        self._region = QLineEdit(sb.region)
-        self._endpoint = QLineEdit(sb.endpoint)
+        self._bucket = QLineEdit()
+        self._region = QLineEdit()
+        self._endpoint = QLineEdit()
         self._credential_store = QComboBox()
         self._credential_store.addItems(["plain", "dpapi", "keyring"])
-        self._credential_store.setCurrentText(sb.credential_store or "plain")
         self._use_ssl = QCheckBox("使用 SSL/TLS")
-        self._use_ssl.setChecked(sb.use_ssl)
         self._retention = QSpinBox()
         self._retention.setRange(1, 9999)
-        self._retention.setValue(sb.retention or 30)
+        self._retention.setValue(30)
         self._compress = QCheckBox("压缩")
-        self._compress.setChecked(sb.compress)
+        self._compress.setChecked(True)
         self._format = QComboBox()
         self._format.addItems(["zip", "7z", "tar.gz"])
-        self._format.setCurrentText(sb.format or "zip")
-        self._archive_password = QLineEdit(
-            sb.archive_password if sb.credential_store == "plain" else "")
+        self._archive_password = QLineEdit()
         self._archive_password.setEchoMode(QLineEdit.Password)
-        if sb.credential_store != "plain":
-            self._archive_password.setPlaceholderText("已加密存储，留空保持原值")
         self._local_copy = QCheckBox("同时保留本地副本（data/backups）")
-        self._local_copy.setChecked(sb.local_copy)
 
         self._s3_box = QGroupBox("S3 专用")
         s3f = QFormLayout(self._s3_box)
@@ -68,25 +60,26 @@ class SelfBackupDialog(QDialog):
         s3f.addRow("Endpoint", self._endpoint)
 
         form = QFormLayout()
-        form.addRow("", self._enabled)
-        form.addRow("协议", self._protocol)
-        form.addRow("主机", self._host)
-        form.addRow("端口", self._port)
-        form.addRow("远程路径", self._remote_path)
-        form.addRow("用户名", self._username)
-        form.addRow("密码", self._password)
-        form.addRow(self._s3_box)
-        form.addRow("凭据存储", self._credential_store)
-        form.addRow("", self._use_ssl)
-        form.addRow("远程保留份数", self._retention)
-        form.addRow("", self._compress)
-        form.addRow("压缩格式", self._format)
-        form.addRow("压缩包密码", self._archive_password)
-        form.addRow("", self._local_copy)
+        form.addRow("", self._enabled)          # 0
+        form.addRow("协议", self._protocol)     # 1
+        form.addRow("主机", self._host)         # 2
+        form.addRow("端口", self._port)         # 3
+        form.addRow("远程路径", self._remote_path)  # 4
+        form.addRow("用户名", self._username)   # 5
+        form.addRow("密码", self._password)     # 6
+        form.addRow(self._s3_box)               # 7
+        form.addRow("凭据存储", self._credential_store)  # 8
+        form.addRow("", self._use_ssl)          # 9
+        form.addRow("远程保留份数", self._retention)  # 10
+        form.addRow("", self._compress)         # 11
+        form.addRow("压缩格式", self._format)   # 12
+        form.addRow("压缩包密码", self._archive_password)  # 13
+        form.addRow("", self._local_copy)       # 14
+        self._form = form
 
         self._test_btn = QPushButton("测试连接")
         self._test_btn.clicked.connect(self._test)
-        form.addRow(self._test_btn)
+        form.addRow(self._test_btn)             # 15
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self._save)
@@ -94,11 +87,69 @@ class SelfBackupDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.addLayout(form)
         lay.addWidget(btns)
-        self._protocol.currentTextChanged.connect(self._sync_s3)
-        self._sync_s3(self._protocol.currentText())
+        self._protocol.currentTextChanged.connect(self._on_protocol_changed)
+        # 初始化各协议字段（切协议时把当前表单值先写回原协议，再载入新协议）
+        self._field_state: dict[str, dict] = {}
+        self._protocol.setCurrentText(self._old_sb.protocol)
+        self._load_sb(self._old_sb)
+
+    def _snapshot_fields(self) -> dict:
+        """当前表单值 -> dict（按协议暂存）。"""
+        sb = self._collect()
+        return {k: v for k, v in sb.__dict__.items() if k != "protocol"}
+
+    def _on_protocol_changed(self, proto: str):
+        if self._current_proto == proto:
+            return
+        # 先把当前协议的表单值快照暂存，再载入新协议
+        self._field_state[self._current_proto] = self._snapshot_fields()
+        self._current_proto = proto
+        st = self._field_state.get(proto)
+        if st:
+            from ..model import SelfBackup
+            self._load_sb(SelfBackup(protocol=proto, **st))
+        else:
+            self._load_sb(store.load_settings().sb(proto))
+        self._old_sb = store.load_settings().sb(proto)
+
+    def _load_sb(self, sb):
+        self._enabled.setChecked(sb.enabled)
+        self._host.setText(sb.host)
+        self._port.setText(str(sb.port) if sb.port else "")
+        self._remote_path.setText(sb.remote_path)
+        self._username.setText(sb.username)
+        self._password.setText(sb.password if sb.credential_store == "plain" else "")
+        self._password.setPlaceholderText(
+            "" if sb.credential_store == "plain" else "已加密存储，留空保持原值")
+        self._bucket.setText(sb.bucket)
+        self._region.setText(sb.region)
+        self._endpoint.setText(sb.endpoint)
+        self._credential_store.setCurrentText(sb.credential_store or "plain")
+        self._use_ssl.setChecked(sb.use_ssl)
+        self._retention.setValue(sb.retention or 30)
+        self._compress.setChecked(sb.compress)
+        self._format.setCurrentText(sb.format or "zip")
+        self._archive_password.setText(
+            sb.archive_password if sb.credential_store == "plain" else "")
+        self._archive_password.setPlaceholderText(
+            "" if sb.credential_store == "plain" else "已加密存储，留空保持原值")
+        self._local_copy.setChecked(sb.local_copy)
+        self._sync_s3(sb.protocol)
 
     def _sync_s3(self, proto: str):
-        self._s3_box.setVisible(proto == "s3")
+        """S3 用 endpoint/bucket 寻址，隐藏 主机/端口 行；字段标签按协议改名。"""
+        is_s3 = proto == "s3"
+        self._s3_box.setVisible(is_s3)
+        # 行索引见 __init__ 注释
+        self._form.setRowVisible(2, not is_s3)  # 主机
+        self._form.setRowVisible(3, not is_s3)  # 端口
+        # S3: 用户名=Access Key、密码=Secret Key、远程路径=Prefix
+        lbl = self._form.labelForField
+        lbl(self._username).setText("Access Key" if is_s3 else "用户名")
+        lbl(self._password).setText("Secret Key" if is_s3 else "密码")
+        lbl(self._remote_path).setText("Prefix" if is_s3 else "远程路径")
+        # 行显隐后窗口高度不自动收缩，adjustSize 让按钮回到可视区
+        self.adjustSize()
 
     def _collect(self):
         """从表单构造 SelfBackup（不写盘）。"""
@@ -127,7 +178,16 @@ class SelfBackupDialog(QDialog):
     def _test(self):
         from .workers import TestWorker
         sb = self._collect()
-        if not sb.host:
+        if sb.protocol == "s3":
+            missing = [f for f, v in (("Endpoint", sb.endpoint),
+                                      ("Bucket", sb.bucket),
+                                      ("Access Key", sb.username),
+                                      ("Secret Key", sb.password)) if not v]
+            if missing:
+                QMessageBox.warning(self, "测试连接",
+                                    f"请先填写: {', '.join(missing)}")
+                return
+        elif not sb.host:
             QMessageBox.warning(self, "测试连接", "请先填写主机地址")
             return
         self._test_btn.setEnabled(False)
@@ -150,8 +210,9 @@ class SelfBackupDialog(QDialog):
     def _save(self):
         from .. import security
         cfg = store.load_settings()
+        # 各协议独立保存：写回当前协议配置，不影响其他协议
         sb = self._collect()
-        old = self._old_sb
+        old = store.load_settings().sb(sb.protocol)
         kind = sb.credential_store
         if kind == "plain":
             if old.credential_store != "plain" and not sb.password:
@@ -170,11 +231,19 @@ class SelfBackupDialog(QDialog):
             else:
                 sb.archive_password = old.archive_password
             if kind == "keyring":
-                security.keyring_set(security._KEY_REMOTE, sb.password or "")
-                security.keyring_set(security._KEY_ARCHIVE, sb.archive_password or "")
+                security.keyring_set(security._KEY_REMOTE + f"_{sb.protocol}",
+                                     sb.password or "")
+                security.keyring_set(security._KEY_ARCHIVE + f"_{sb.protocol}",
+                                     sb.archive_password or "")
                 sb.password = ""
                 sb.archive_password = ""
-        cfg.self_backup = sb
+        # 单协议启用：保存当前协议时，其他协议一律停用，
+        # 避免"启用 s3 时 webdav 也跟着启用"（enabled_sbs 会同时返回两者）
+        if sb.enabled:
+            for proto, other in cfg.self_backups.items():
+                if proto != sb.protocol:
+                    other.enabled = False
+        cfg.self_backups[sb.protocol] = sb
         store.save_settings(cfg)
         self.accept()
 
@@ -275,3 +344,174 @@ class SchedulerGroup(QGroupBox):
             if err:
                 QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
         self.refresh_status()
+
+
+def _fmt_size(n: int) -> str:
+    if n <= 0:
+        return "-"
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
+class SelfBackupFilesDialog(QDialog):
+    """远程自身备份文件管理：列出（文件名/大小/备份时间），可恢复或删除。"""
+
+    restored = Signal()  # 数据被恢复/删除后发出，主窗口据此刷新应用列表
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("自身备份文件")
+        self.resize(720, 420)
+        cfg = store.load_settings()
+        self._protocol = QComboBox()
+        self._protocol.addItems(_PROTOCOLS)
+        # 默认选中第一个已启用的协议（没有则 webdav）
+        enabled = [sb.protocol for sb in cfg.enabled_sbs()]
+        default = enabled[0] if enabled else "webdav"
+        self._protocol.setCurrentText(default)
+        self._protocol.currentIndexChanged.connect(self._refresh)
+
+        lay = QVBoxLayout(self)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("协议:"))
+        top.addWidget(self._protocol)
+        self._status = QLabel("")
+        top.addWidget(self._status, 1)
+        lay.addLayout(top)
+
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["文件名", "大小", "备份时间"])
+        self._table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self._table.setSelectionBehavior(QTableWidget.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SingleSelection)
+        self._table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._table.doubleClicked.connect(self._restore_selected)
+        lay.addWidget(self._table, 1)
+
+        btns = QHBoxLayout()
+        self._btn_refresh = QPushButton("刷新")
+        self._btn_restore = QPushButton("恢复选中")
+        self._btn_delete = QPushButton("删除选中")
+        self._btn_close = QPushButton("关闭")
+        self._btn_refresh.clicked.connect(self._refresh)
+        self._btn_restore.clicked.connect(self._restore_selected)
+        self._btn_delete.clicked.connect(self._delete_selected)
+        self._btn_close.clicked.connect(self.accept)
+        btns.addWidget(self._btn_refresh)
+        btns.addWidget(self._btn_restore)
+        btns.addWidget(self._btn_delete)
+        btns.addStretch(1)
+        btns.addWidget(self._btn_close)
+        lay.addLayout(btns)
+
+        self._workers: list = []
+        self._refresh()
+
+    # ---- 列表 ----
+
+    def _refresh(self):
+        from .workers import SelfListWorker
+        self._table.setRowCount(0)
+        self._status.setText("加载中...")
+        self._btn_refresh.setEnabled(False)
+        w = SelfListWorker(self._protocol.currentText(), self)
+        self._workers.append(w)
+
+        def _done(files, err: str):
+            self._btn_refresh.setEnabled(True)
+            self._workers.remove(w)
+            if err:
+                self._status.setText(f"加载失败: {err}")
+                return
+            self._populate(files or [])
+            self._status.setText(f"共 {len(files or [])} 个备份")
+
+        w.done.connect(_done)
+        w.finished.connect(w.deleteLater)
+        w.start()
+
+    def _populate(self, files):
+        from ..protocols.base import RemoteFile  # noqa: F401 (类型提示)
+        self._table.setRowCount(len(files))
+        for row, f in enumerate(files):
+            self._table.setItem(row, 0, QTableWidgetItem(f.name))
+            self._table.setItem(row, 1, QTableWidgetItem(_fmt_size(f.size)))
+            self._table.setItem(row, 2, QTableWidgetItem(
+                f.mtime.replace("T", " ")[:19] if f.mtime else "-"))
+
+    def _selected_name(self) -> str | None:
+        row = self._table.currentRow()
+        if row < 0:
+            return None
+        return self._table.item(row, 0).text()
+
+    # ---- 操作 ----
+
+    def _restore_selected(self, *_):
+        name = self._selected_name()
+        if not name:
+            QMessageBox.information(self, "恢复", "请先选择一个备份文件")
+            return
+        ret = QMessageBox.question(
+            self, "恢复自身备份",
+            f"将从远程恢复 {name}，覆盖当前 apps/ 与 settings.json？\n"
+            f"（恢复前会把当前数据移到 data/self_restore_old_* 备份）")
+        if ret != QMessageBox.Yes:
+            return
+        from .workers import SelfRestoreWorker
+        proto = self._protocol.currentText()
+        self._set_busy(True)
+        w = SelfRestoreWorker(proto, name, self)
+        self._workers.append(w)
+
+        def _done(ok: bool, msg: str):
+            self._set_busy(False)
+            self._workers.remove(w)
+            if ok:
+                QMessageBox.information(self, "恢复", f"恢复成功：{msg}")
+                self._refresh()
+                self.restored.emit()
+            else:
+                QMessageBox.critical(self, "恢复失败", msg)
+
+        w.done.connect(_done)
+        w.finished.connect(w.deleteLater)
+        w.start()
+
+    def _delete_selected(self):
+        name = self._selected_name()
+        if not name:
+            QMessageBox.information(self, "删除", "请先选择一个备份文件")
+            return
+        ret = QMessageBox.question(self, "删除备份",
+                                   f"确定删除远程备份 {name}？")
+        if ret != QMessageBox.Yes:
+            return
+        from .workers import SelfDeleteWorker
+        proto = self._protocol.currentText()
+        self._set_busy(True)
+        w = SelfDeleteWorker(proto, name, self)
+        self._workers.append(w)
+
+        def _done(ok: bool, msg: str):
+            self._set_busy(False)
+            self._workers.remove(w)
+            if ok:
+                self._status.setText(msg)
+                self._refresh()
+                self.restored.emit()
+            else:
+                QMessageBox.critical(self, "删除失败", msg)
+
+        w.done.connect(_done)
+        w.finished.connect(w.deleteLater)
+        w.start()
+
+    def _set_busy(self, busy: bool):
+        for b in (self._btn_refresh, self._btn_restore, self._btn_delete,
+                  self._protocol):
+            b.setEnabled(not busy)

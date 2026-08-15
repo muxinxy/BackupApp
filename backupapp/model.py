@@ -7,10 +7,23 @@ JSON 字段保持驼峰命名（与设计草案一致），代码内用 snake_ca
 from dataclasses import dataclass, field
 from datetime import datetime
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 MIGRATIONS: dict[int, callable] = {}
 """v1 起。MIGRATIONS[v] 把 v 版 dict 升级为 v+1 版。"""
+
+
+def _migrate_v1_to_v2(d: dict) -> dict:
+    """v1 -> v2：selfBackup 单对象 -> selfBackups 按协议分组（每协议独立配置）。"""
+    sb = d.get("selfBackup")
+    if isinstance(sb, dict) and sb:
+        proto = str(sb.get("protocol", "webdav"))
+        d["selfBackups"] = {proto: sb}
+    d.pop("selfBackup", None)
+    return d
+
+
+MIGRATIONS[1] = _migrate_v1_to_v2
 
 
 def now_iso() -> str:
@@ -277,9 +290,17 @@ class Settings:
     schema_version: int = SCHEMA_VERSION
     general: General = field(default_factory=General)
     scheduler: SchedulerCfg = field(default_factory=SchedulerCfg)
-    self_backup: SelfBackup = field(default_factory=SelfBackup)
+    self_backups: dict[str, SelfBackup] = field(default_factory=dict)
     scripts: ScriptsCfg = field(default_factory=ScriptsCfg)
     scheduler_registered: bool = False
+
+    def sb(self, protocol: str) -> SelfBackup:
+        """指定协议的自身备份配置；不存在时返回该协议默认值（不写入）。"""
+        return self.self_backups.get(protocol, SelfBackup(protocol=protocol))
+
+    def enabled_sbs(self) -> list[SelfBackup]:
+        """已启用的自身备份配置列表。"""
+        return [sb for sb in self.self_backups.values() if sb.enabled]
 
     @classmethod
     def default(cls) -> "Settings":
@@ -290,7 +311,7 @@ class Settings:
             "schemaVersion": self.schema_version,
             "general": self.general.to_dict(),
             "scheduler": self.scheduler.to_dict(),
-            "selfBackup": self.self_backup.to_dict(),
+            "selfBackups": {k: v.to_dict() for k, v in self.self_backups.items()},
             "scripts": self.scripts.to_dict(),
             "schedulerRegistered": self.scheduler_registered,
         }
@@ -298,11 +319,12 @@ class Settings:
     @classmethod
     def from_dict(cls, d: dict) -> "Settings":
         d = _migrate(d)
+        sbs = {k: SelfBackup.from_dict(v) for k, v in d.get("selfBackups", {}).items()}
         return cls(
             schema_version=int(d.get("schemaVersion", SCHEMA_VERSION)),
             general=General.from_dict(d.get("general", {})),
             scheduler=SchedulerCfg.from_dict(d.get("scheduler", {})),
-            self_backup=SelfBackup.from_dict(d.get("selfBackup", {})),
+            self_backups=sbs,
             scripts=ScriptsCfg.from_dict(d.get("scripts", {})),
             scheduler_registered=bool(d.get("schedulerRegistered", False)),
         )

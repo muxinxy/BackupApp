@@ -13,10 +13,11 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QToolBar, QVBoxLayout, QWidget)
 
 from ..model import BackupPlan
+from .. import __version__
 from ..storage import importexport, store
 from .app_dialog import AppDialog
 from .plan_dialog import PlanDialog
-from .settings_dialogs import SchedulerGroup, SelfBackupDialog
+from .settings_dialogs import SchedulerGroup, SelfBackupDialog, SelfBackupFilesDialog
 from .workers import BackupWorker, RestoreWorker
 
 _PLAN_COLS = ["启用", "名称", "源", "目的", "保留", "格式", "创建时间", "修改时间", "状态", "任务"]
@@ -47,6 +48,25 @@ class MainWindow(QMainWindow):
 
     # ---------- 构建 ----------
 
+    _APP_DESC = "应用配置与数据备份工具（便携，跨平台）"
+    _GITHUB_URL = "https://github.com/muxinxy/BackupApp"
+
+    def _about(self):
+        from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("关于 BackupApp")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel(f"<h3>BackupApp</h3>"))
+        lay.addWidget(QLabel(f"<b>{self._APP_DESC}</b>"))
+        lay.addWidget(QLabel(f"版本 {__version__}"))
+        link = QLabel(f'<a href="{self._GITHUB_URL}">{self._GITHUB_URL}</a>')
+        link.setOpenExternalLinks(True)
+        lay.addWidget(link)
+        ok = QPushButton("确定")
+        ok.clicked.connect(dlg.accept)
+        lay.addWidget(ok)
+        dlg.exec()
+
     def _build_toolbar(self):
         tb = QToolBar("主工具栏")
         tb.setMovable(False)
@@ -61,16 +81,34 @@ class MainWindow(QMainWindow):
         self.act_self_backup.triggered.connect(self._self_backup_dialog)
         self.act_self_backup_now = QAction("备份自身", self)
         self.act_self_backup_now.triggered.connect(self._self_backup_now)
+        self.act_self_backup_files = QAction("备份文件", self)
+        self.act_self_backup_files.triggered.connect(self._self_backup_files_dialog)
         self.act_script = QAction("批量生成脚本", self)
         self.act_script.triggered.connect(self._scripts_batch)
         self.act_task_batch_reg = QAction("批量注册任务", self)
         self.act_task_batch_reg.triggered.connect(self._task_batch_register)
         self.act_task_batch_unreg = QAction("批量取消注册任务", self)
         self.act_task_batch_unreg.triggered.connect(self._task_batch_unregister)
-        for a in (self.act_backup_all, self.act_import, self.act_export_all,
-                  self.act_self_backup, self.act_self_backup_now, self.act_script,
-                  self.act_task_batch_reg, self.act_task_batch_unreg):
-            tb.addAction(a)
+        self.act_about = QAction("关于", self)
+        self.act_about.triggered.connect(self._about)
+
+        # 按钮按功能分组，每组用 QFrame 框起来
+        self._tool_group(tb, [
+            self.act_backup_all,
+        ])
+        self._tool_group(tb, [
+            self.act_import, self.act_export_all,
+        ])
+        self._tool_group(tb, [
+            self.act_task_batch_reg, self.act_task_batch_unreg,
+        ])
+        self._tool_group(tb, [
+            self.act_script,
+        ])
+        self._tool_group(tb, [
+            self.act_self_backup, self.act_self_backup_now,
+            self.act_self_backup_files,
+        ])
         tb.addSeparator()
         # 主题切换（明亮/暗黑/跟随系统），选择持久化到 settings
         self.theme_combo = QComboBox()
@@ -82,6 +120,24 @@ class MainWindow(QMainWindow):
         self.theme_combo.currentIndexChanged.connect(self._theme_changed)
         tb.addWidget(QLabel(" 主题:"))
         tb.addWidget(self.theme_combo)
+        # 关于放工具栏最后
+        tb.addSeparator()
+        self._tool_group(tb, [self.act_about])
+
+    def _tool_group(self, tb: QToolBar, actions: list[QAction]):
+        """把一组 QAction 放进带边框的 QFrame 再挂到工具栏。"""
+        from PySide6.QtWidgets import QFrame, QHBoxLayout, QToolButton
+        frame = QFrame()
+        frame.setObjectName("toolGroup")
+        lay = QHBoxLayout(frame)
+        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setSpacing(2)
+        for act in actions:
+            btn = QToolButton()
+            btn.setDefaultAction(act)
+            btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            lay.addWidget(btn)
+        tb.addWidget(frame)
 
     def _theme_changed(self):
         from PySide6.QtWidgets import QApplication
@@ -694,6 +750,17 @@ class MainWindow(QMainWindow):
 
     def _self_backup_dialog(self):
         SelfBackupDialog(self).exec()
+
+    def _self_backup_files_dialog(self):
+        dlg = SelfBackupFilesDialog(self)
+        dlg.restored.connect(self._on_self_restored)
+        dlg.exec()
+
+    def _on_self_restored(self):
+        """自身备份恢复/删除后刷新应用列表与计划表格（无需重启）。"""
+        self.refresh_apps()
+        self.refresh_plans()
+        self._log("自身备份数据已变更，界面已刷新")
 
     def _self_backup_now(self):
         from ..protocols.runner import run_self_backup

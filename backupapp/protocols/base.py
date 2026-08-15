@@ -1,16 +1,31 @@
 """远程上传协议统一接口：webdav / s3 / ftp / sftp。
 
-远程备份命名统一为 backupapp_<YYYYMMDD_HHMMSS>.<ext>，按文件名排序即按时间排序，
-远程保留策略按此剪枝。
+远程备份命名统一为 backupapp_<设备名>_<YYYYMMDD_HHMMSS>.<ext>（设备名缺省为空），
+按文件名排序即按时间排序，远程保留策略按此剪枝。
 """
 
 import re
+import socket
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from ..model import SelfBackup
 
 BACKUP_PREFIX = "backupapp_"
-SNAP_RE = re.compile(rf"^{BACKUP_PREFIX}\d{{8}}_\d{{6}}\.")
+SNAP_RE = re.compile(rf"^{BACKUP_PREFIX}[\w.-]*_\d{{8}}_\d{{6}}\.")
+
+
+def device_name() -> str:
+    """本机设备名（用于备份文件名，清洗成文件系统安全字符）。"""
+    name = socket.gethostname()
+    return re.sub(r"[^\w.-]", "_", name) or "host"
+
+
+@dataclass
+class RemoteFile:
+    name: str
+    size: int = 0
+    mtime: str = ""  # 备份时间，ISO 格式
 
 
 class Uploader(ABC):
@@ -23,8 +38,12 @@ class Uploader(ABC):
         """上传本地文件到远程，remote_name 为文件名（不含目录）。"""
 
     @abstractmethod
-    def list(self) -> list[str]:
-        """返回远程与本应用备份匹配的文件名列表。"""
+    def download(self, remote_name: str, local_path: str) -> None:
+        """下载远程文件到本地，remote_name 为文件名（不含目录）。"""
+
+    @abstractmethod
+    def list(self) -> list[RemoteFile]:
+        """返回远程与本应用备份匹配的文件元数据列表。"""
 
     @abstractmethod
     def delete(self, remote_name: str) -> None:
@@ -48,11 +67,11 @@ def prune_remote(u: Uploader, keep: int) -> int:
     """保留最近 keep 份远程备份，返回删除数。keep<=0 视为保留全部。"""
     if keep <= 0:
         return 0
-    names = sorted(u.list(), reverse=True)
+    files = sorted(u.list(), key=lambda f: f.name, reverse=True)
     removed = 0
-    for name in names[keep:]:
+    for f in files[keep:]:
         try:
-            u.delete(name)
+            u.delete(f.name)
             removed += 1
         except Exception:
             pass

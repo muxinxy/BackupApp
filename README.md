@@ -14,6 +14,8 @@
   - `script.ps1 backup -y` → 静默备份
   - `script.ps1 restore -y [-Snapshot 名称] [-NoPrebak]` → 静默恢复（默认先备份当前配置，可指定快照）
 - **凭据安全**：DPAPI（Windows 原生加密）/ keyring（跨平台 OS 凭据库）/ plain 三种存储方式
+- **自身备份 / 恢复**：备份本工具自身配置（apps/ + settings.json）到远程（FTP/SFTP/S3/WebDAV），各协议配置独立保存；GUI 可查看远程备份文件列表（文件名/大小/时间），支持**恢复**与**删除**单个备份；恢复前自动把当前数据移到 `data/self_restore_old_*` 安全网
+- **远程网关兼容**：WebDAV 兼容 OpenList 等网关（标准 `{DAV:}` 命名空间、href URL 解码、GET 302 签名地址跟随）；S3 经 CDN/OSS 网关时列表/下载可用（boto3 + presigned URL）
 - **导入 / 导出**：配置整体导出为 zip 并可重新导入迁移
 
 ## 安装
@@ -62,6 +64,18 @@ backupapp import out.zip
 
 # 校验配置与数据目录
 backupapp validate
+
+# 自身备份（默认所有启用的协议，可 --protocol 指定单个）
+backupapp self-backup [--protocol webdav|s3|ftp|sftp]
+
+# 列出远程自身备份文件（文件名/大小/备份时间）
+backupapp self-list --protocol webdav
+
+# 从远程恢复指定自身备份（覆盖 apps/ + settings.json，旧数据先移到 .old）
+backupapp self-restore --protocol webdav --file backupapp_MyPC_20260815_023740.zip
+
+# 删除远程自身备份文件
+backupapp self-delete --protocol webdav --file backupapp_MyPC_20260815_023740.zip
 ```
 
 ## 打包
@@ -77,9 +91,10 @@ pyinstaller packaging/backupapp.spec
 ```
 backupapp/
   engine/      备份、恢复、压缩、保留策略、链接与路径处理
-  protocols/   协议适配器（FTP / SFTP / S3 / WebDAV / 本地）
+  protocols/   远程协议适配器（FTP / SFTP / S3 / WebDAV）+ 自身备份编排（runner）
   storage/     配置存储、导入导出、文件锁
-  gui/         PySide6 桌面界面
+  security.py  凭据加密（plain / dpapi / keyring）
+  gui/         PySide6 桌面界面（主窗口 / 对话框 / 后台 worker / 主题）
   scripts/     独立备份/恢复脚本生成（bat / ps1 / sh 模板）
 scripts/        开发用冒烟测试脚本
 tests/          测试与夹具
@@ -90,7 +105,9 @@ packaging/      PyInstaller 打包配置与图标
 
 ```bash
 python scripts/smoke_test.py      # 核心逻辑冒烟
-python scripts/protocol_smoke.py  # 协议冒烟
+python scripts/protocol_smoke.py  # 协议 + 自身备份/恢复冒烟
 python scripts/gui_smoke.py       # GUI 冒烟
 python scripts/security_smoke.py  # 凭据加密冒烟
 ```
+
+交接与发布流程见 [DEVELOPMENT.md](DEVELOPMENT.md)。

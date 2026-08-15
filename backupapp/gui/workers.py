@@ -93,3 +93,55 @@ class TestWorker(QThread):
         except Exception as e:
             ok, msg = False, str(e)
         self.done.emit(ok, msg)
+
+
+class SelfListWorker(QThread):
+    """后台加载远程自身备份文件列表。"""
+
+    done = Signal(object, str)  # list[RemoteFile] | None, 错误信息
+
+    def __init__(self, protocol: str, parent=None):
+        super().__init__(parent)
+        self._protocol = protocol
+
+    def run(self):
+        from ..protocols.runner import list_remote_files
+        try:
+            self.done.emit(list_remote_files(self._protocol), "")
+        except Exception as e:
+            self.done.emit(None, str(e))
+
+
+class SelfRestoreWorker(QThread):
+    """后台执行自身备份恢复。"""
+
+    done = Signal(bool, str)
+
+    def __init__(self, protocol: str, remote_name: str, parent=None):
+        super().__init__(parent)
+        self._protocol = protocol
+        self._remote_name = remote_name
+
+    def run(self):
+        from ..protocols.runner import run_self_restore
+        r = run_self_restore(self._protocol, self._remote_name)
+        if r.ok:
+            self.done.emit(True, f"已恢复 {r.files} 个文件")
+        else:
+            self.done.emit(False, r.error or "恢复失败")
+
+
+class SelfDeleteWorker(QThread):
+    """后台删除远程自身备份文件。"""
+
+    done = Signal(bool, str)
+
+    def __init__(self, protocol: str, remote_name: str, parent=None):
+        super().__init__(parent)
+        self._protocol = protocol
+        self._remote_name = remote_name
+
+    def run(self):
+        from ..protocols.runner import delete_remote_file
+        err = delete_remote_file(self._protocol, self._remote_name)
+        self.done.emit(err is None, err or "已删除")

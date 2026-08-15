@@ -23,14 +23,24 @@ def entry_path(dest: str, app_id: str, snapshot: str, compress: bool,
 
 
 def list_entries(dest: str, app_id: str) -> list[str]:
-    """该应用在 dest 下的备份条目，按快照从新到旧排序。"""
+    """该应用在 dest 下的备份条目，按快照从新到旧排序。
+
+    app_id == "backupapp" 时匹配自身备份（backupapp_<device>_<snap>.<ext>，
+    设备名段可缺省），与远程 SNAP_RE 规则一致。
+    """
     if not os.path.isdir(dest):
         return []
     out = []
-    for name in os.listdir(dest):
-        m = ENTRY_RE.match(name)
-        if m and m.group("app") == app_id:
-            out.append(os.path.join(dest, name))
+    if app_id == "backupapp":
+        self_re = re.compile(rf"^{app_id}[\w.-]*_\d{{8}}_\d{{6}}(\.(zip|7z|tar\.gz))?$")
+        for name in os.listdir(dest):
+            if self_re.match(name):
+                out.append(os.path.join(dest, name))
+    else:
+        for name in os.listdir(dest):
+            m = ENTRY_RE.match(name)
+            if m and m.group("app") == app_id:
+                out.append(os.path.join(dest, name))
     out.sort(key=os.path.basename, reverse=True)
     return out
 

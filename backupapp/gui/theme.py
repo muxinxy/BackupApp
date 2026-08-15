@@ -65,6 +65,11 @@ QToolButton {
     border-radius: 6px;
     padding: 3px 8px;
 }
+QFrame#toolGroup {
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: transparent;
+}
 QGroupBox {
     border-radius: 10px;
     margin-top: 14px;

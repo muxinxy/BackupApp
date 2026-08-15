@@ -42,12 +42,14 @@ def main() -> None:
         assert plain_sb(sbd).password == "pw"
         assert plain_sb(sbd).archive_password == "apw"
         print("[ok] plain_sb/secrets dpapi")
-    sbs = SelfBackup(credential_store="keyring", password="", archive_password="")
-    keyring_set("selfbackup_remote", "kr-pw")
-    keyring_set("selfbackup_archive", "kr-apw")
+    sbs = SelfBackup(protocol="webdav", credential_store="keyring",
+                     password="", archive_password="")
+    # keyring key 按协议区分（多协议独立配置）
+    keyring_set("selfbackup_remote_webdav", "kr-pw")
+    keyring_set("selfbackup_archive_webdav", "kr-apw")
     assert plain_sb(sbs).password == "kr-pw"
-    keyring_set("selfbackup_remote", "")
-    keyring_set("selfbackup_archive", "")
+    keyring_set("selfbackup_remote_webdav", "")
+    keyring_set("selfbackup_archive_webdav", "")
     print("[ok] plain_sb/secrets keyring")
 
     # --- 多源脚本生成 ---

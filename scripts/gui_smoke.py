@@ -13,7 +13,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backupapp.storage import store  # noqa: E402
 
-store.set_data_root(r"C:\Users\ZengZhe\AppData\Local\Temp\opencode\backupapp_smoke\data")
+# 自包含：清空并用假应用初始化数据目录，避免依赖手工预置数据
+smoke_data = r"C:\Users\ZengZhe\AppData\Local\Temp\opencode\backupapp_smoke\data"
+smoke_src = r"C:\Users\ZengZhe\AppData\Local\Temp\opencode\backupapp_smoke\src"
+smoke_dst = r"C:\Users\ZengZhe\AppData\Local\Temp\opencode\backupapp_smoke\bk"
+store.set_data_root(smoke_data)
+import shutil  # noqa: E402
+for p in (smoke_data, smoke_src, smoke_dst):
+    shutil.rmtree(p, ignore_errors=True)
+os.makedirs(smoke_src, exist_ok=True)
+with open(os.path.join(smoke_src, "config.ini"), "w", encoding="utf-8") as f:
+    f.write("key=value")
+from backupapp.model import AppConfig, BackupPlan  # noqa: E402
+plan = BackupPlan(id="cfg", name="cfg", sources=[smoke_src], destination=smoke_dst)
+store.save_app(AppConfig(id="testapp", name="Test App", plans=[plan]))
 
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402

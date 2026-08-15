@@ -78,7 +78,9 @@ def secrets(sb: SelfBackup) -> tuple[str, str]:
     if sb.credential_store == "dpapi":
         return (decrypt_secret(sb.password), decrypt_secret(sb.archive_password))
     if sb.credential_store == "keyring":
-        return (keyring_get(_KEY_REMOTE), keyring_get(_KEY_ARCHIVE))
+        # key 按协议区分（多协议独立配置）
+        return (keyring_get(_KEY_REMOTE + f"_{sb.protocol}"),
+                keyring_get(_KEY_ARCHIVE + f"_{sb.protocol}"))
     return sb.password, sb.archive_password
 
 

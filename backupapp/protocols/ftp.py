@@ -1,9 +1,13 @@
-"""FTP 上传器：ftplib（stdlib）。use_ssl 时用 FTP_TLS（显式 TLS）。"""
+"""FTP 上传器：ftplib（stdlib）。use_ssl 时用 FTP_TLS（显式 TLS）。
 
+list() 优先 MLSD（自带大小/时间），不支持时回退 nlst + SIZE。
+"""
+
+from datetime import datetime
 from ftplib import FTP, FTP_TLS, error_perm
 
 from ..model import SelfBackup
-from .base import BACKUP_PREFIX, Uploader
+from .base import BACKUP_PREFIX, RemoteFile, Uploader
 
 
 class FTPUploader(Uploader):
@@ -51,15 +55,44 @@ class FTPUploader(Uploader):
             with open(local_path, "rb") as f:
                 ftp.storbinary(f"STOR {remote_name}", f)
 
-    def list(self) -> list[str]:
+    def download(self, remote_name: str, local_path: str) -> None:
         with self._connect() as ftp:
             if self.path:
                 self._ensure_dir(ftp)
+            with open(local_path, "wb") as f:
+                ftp.retrbinary(f"RETR {remote_name}", f.write)
+
+    def list(self) -> list[RemoteFile]:
+        with self._connect() as ftp:
+            if self.path:
+                self._ensure_dir(ftp)
+            out = []
+            if self.path:
+                ftp.cwd(self.path)
+            # 优先 MLSD（标准），失败回退 nlst + SIZE
             try:
-                names = ftp.nlst()
+                for name, facts in ftp.mlsd():
+                    if not name.startswith(BACKUP_PREFIX):
+                        continue
+                    size = int(facts.get("size", 0) or 0)
+                    mtime = ""
+                    if facts.get("modify"):
+                        try:
+                            mtime = datetime.strptime(
+                                facts["modify"], "%Y%m%d%H%M%S").isoformat()
+                        except ValueError:
+                            pass
+                    out.append(RemoteFile(name=name, size=size, mtime=mtime))
             except error_perm:
-                names = []
-        return [n for n in names if n.startswith(BACKUP_PREFIX)]
+                for name in ftp.nlst():
+                    if not name.startswith(BACKUP_PREFIX):
+                        continue
+                    try:
+                        size = ftp.size(name) or 0
+                    except error_perm:
+                        size = 0
+                    out.append(RemoteFile(name=name, size=size))
+            return out
 
     def delete(self, remote_name: str) -> None:
         with self._connect() as ftp:

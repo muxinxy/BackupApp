@@ -1,11 +1,12 @@
-"""SFTP 上传器：paramiko。"""
+"""SFTP 上传器：paramiko。list() 用 listdir_attr 拿大小/时间。"""
 
 import posixpath
+from datetime import datetime
 
 import paramiko
 
 from ..model import SelfBackup
-from .base import BACKUP_PREFIX, Uploader
+from .base import BACKUP_PREFIX, RemoteFile, Uploader
 
 
 class SFTPUploader(Uploader):
@@ -51,13 +52,26 @@ class SFTPUploader(Uploader):
                 self._ensure_dir(sftp)
             sftp.put(local_path, self._remote(remote_name))
 
-    def list(self) -> list[str]:
+    def download(self, remote_name: str, local_path: str) -> None:
+        with self._connect() as sftp:
+            sftp.get(self._remote(remote_name), local_path)
+
+    def list(self) -> list[RemoteFile]:
         with self._connect() as sftp:
             try:
-                names = sftp.listdir(self.path or ".")
+                attrs = sftp.listdir_attr(self.path or ".")
             except FileNotFoundError:
-                names = []
-        return [n for n in names if n.startswith(BACKUP_PREFIX)]
+                attrs = []
+            out = []
+            for a in attrs:
+                if not a.filename.startswith(BACKUP_PREFIX):
+                    continue
+                mtime = ""
+                if a.st_mtime:
+                    mtime = datetime.fromtimestamp(a.st_mtime).isoformat()
+                out.append(RemoteFile(name=a.filename, size=int(a.st_size),
+                                      mtime=mtime))
+            return out
 
     def delete(self, remote_name: str) -> None:
         with self._connect() as sftp:

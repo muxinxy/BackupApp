@@ -73,15 +73,48 @@ def cmd_task(args) -> int:
 
 def cmd_self_backup(args) -> int:
     from .protocols.runner import run_self_backup
-    r = run_self_backup()
+    results = run_self_backup(protocol=args.protocol)
+    for r in results:
+        if r.ok:
+            print(f"OK {r.remote_name} -> {r.remote} ({r.files} 文件, {r.bytes} 字节, "
+                  f"清理 {r.pruned} 个旧备份)")
+            if r.local_path:
+                print(f"   本地副本: {r.local_path}")
+        else:
+            print(f"FAIL: {r.error}", file=sys.stderr)
+    return 0 if all(r.ok for r in results) else 1
+
+
+def cmd_self_list(args) -> int:
+    from .protocols.runner import list_remote_files
+    try:
+        files = list_remote_files(args.protocol)
+    except Exception as e:
+        _die(str(e))
+    for f in files:
+        size = f"{f.size:,}" if f.size else "-"
+        print(f"{f.name}\t{size} B\t{f.mtime}")
+    return 0
+
+
+def cmd_self_restore(args) -> int:
+    from .protocols.runner import run_self_restore
+    r = run_self_restore(args.protocol, args.file)
     if r.ok:
-        print(f"OK {r.remote_name} -> {r.remote} ({r.files} 文件, {r.bytes} 字节, "
-              f"清理 {r.pruned} 个旧备份)")
-        if r.local_path:
-            print(f"   本地副本: {r.local_path}")
+        print(f"OK 已恢复 {r.protocol}://{r.remote_name} ({r.files} 个文件)")
         return 0
     print(f"FAIL: {r.error}", file=sys.stderr)
     return 1
+
+
+def cmd_self_delete(args) -> int:
+    from .protocols.runner import delete_remote_file
+    err = delete_remote_file(args.protocol, args.file)
+    if err:
+        print(f"FAIL: {err}", file=sys.stderr)
+        return 1
+    print(f"OK 已删除 {args.file}")
+    return 0
 
 
 def cmd_export(args) -> int:
@@ -207,19 +240,31 @@ def main(argv: list[str] | None = None) -> int:
     p3.add_argument("--snapshot")
     p4 = sub.add_parser("task", help="全局计划任务开关")
     p4.add_argument("action", choices=["on", "off", "status"])
-    sub.add_parser("self-backup", help="备份自身配置到远程（下一阶段）")
+    sub.add_parser("validate", help="校验所有应用/计划配置")
     p5 = sub.add_parser("export", help="导出应用配置")
     p5.add_argument("--app")
     p5.add_argument("--all", action="store_true")
     p5.add_argument("-o", "--output", required=True)
     p6 = sub.add_parser("import", help="导入应用配置")
     p6.add_argument("path")
-    sub.add_parser("validate", help="校验所有应用/计划配置")
     p7 = sub.add_parser("script", help="生成备份/恢复一体脚本")
     p7.add_argument("--app", required=True)
     p7.add_argument("--plan-id", required=True)
     p7.add_argument("--flavor", choices=["ps1", "bat", "sh"], default="ps1")
     p7.add_argument("-o", "--output")
+    p_sb = sub.add_parser("self-backup", help="执行自身备份（默认全部启用的协议）")
+    p_sb.add_argument("--protocol", help="只备份指定协议: webdav|s3|ftp|sftp")
+    p_sl = sub.add_parser("self-list", help="列出远程自身备份文件")
+    p_sl.add_argument("--protocol", required=True,
+                      choices=["webdav", "s3", "ftp", "sftp"])
+    p_sr = sub.add_parser("self-restore", help="从远程恢复自身备份")
+    p_sr.add_argument("--protocol", required=True,
+                      choices=["webdav", "s3", "ftp", "sftp"])
+    p_sr.add_argument("--file", required=True, help="远程备份文件名")
+    p_sd = sub.add_parser("self-delete", help="删除远程自身备份文件")
+    p_sd.add_argument("--protocol", required=True,
+                      choices=["webdav", "s3", "ftp", "sftp"])
+    p_sd.add_argument("--file", required=True)
     _add_app_parser(sub)
 
     args = p.parse_args(argv)
@@ -242,6 +287,9 @@ def main(argv: list[str] | None = None) -> int:
         "restore": cmd_restore,
         "task": cmd_task,
         "self-backup": cmd_self_backup,
+        "self-list": cmd_self_list,
+        "self-restore": cmd_self_restore,
+        "self-delete": cmd_self_delete,
         "export": cmd_export,
         "import": cmd_import,
         "validate": cmd_validate,
