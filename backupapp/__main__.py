@@ -99,7 +99,7 @@ def cmd_self_list(args) -> int:
 
 def cmd_self_restore(args) -> int:
     from .protocols.runner import run_self_restore
-    r = run_self_restore(args.protocol, args.file)
+    r = run_self_restore(args.protocol, args.file, overwrite=not args.no_overwrite)
     if r.ok:
         print(f"OK 已恢复 {r.protocol}://{r.remote_name} ({r.files} 个文件)")
         return 0
@@ -261,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
     p_sr.add_argument("--protocol", required=True,
                       choices=["webdav", "s3", "ftp", "sftp"])
     p_sr.add_argument("--file", required=True, help="远程备份文件名")
+    p_sr.add_argument("--no-overwrite", action="store_true",
+                      help="跳过本机已存在的应用（相同 id 保留现有）")
     p_sd = sub.add_parser("self-delete", help="删除远程自身备份文件")
     p_sd.add_argument("--protocol", required=True,
                       choices=["webdav", "s3", "ftp", "sftp"])

@@ -93,6 +93,30 @@ scripts/            冒烟测试（见第 5 节）
 - 所有 I/O（备份/恢复/测试/远程列表）走 `gui/workers.py` 的 QThread，不冻结界面。
 - worker 内统一 `lock.DataLock` 防与计划任务并发。
 
+### 3.9 导入导出（storage/importexport.py）
+- `export_all(out, password)`：全部应用 + settings.json 打 zip；password 非空时 AES 加密（pyzipper）。
+- `import_(path, overwrite, password, import_settings)`：
+  - `overwrite=False` 跳过已存在的同 ID 应用；
+  - `import_settings=True` 恢复 zip 内 settings.json 的自身备份配置（按协议合并，不覆盖本地其他协议）；
+  - 加密 zip 需 password。
+- GUI 导出/导入均有选项弹窗（加密开关+密码 / 覆盖+恢复设置+密码）。
+
+### 3.10 自身备份恢复的覆盖策略
+- `run_self_restore(protocol, name, overwrite=True)`：`overwrite=False` 时仅恢复本机不存在的应用（同 ID 保留现有），settings.json 照常恢复。
+- GUI 恢复确认弹窗三选：覆盖（推荐）/ 仅新增 / 取消；CLI `self-restore --no-overwrite`。
+
+### 3.11 FTP 网关兼容（踩坑记录）
+- **TLS 自动降级**：GUI 默认勾选"使用 SSL/TLS"，但部分 FTP 网关不支持 TLS（550 TLS config）——`_connect()` 先试 FTP_TLS，失败自动降级普通 FTP。
+- **PASV 偶发超时重试**：网关的被动数据连接偶发建立慢（>10s timeout），上传/下载用 `_retry`（最多 3 次，TimeoutError 时重连重试）。
+- **TYPE I**：`retrbinary` 不自动设二进制模式，ASCII 下部分服务器 RETR 卡死/报 550——下载前显式 `voidcmd("TYPE I")`。
+- **绝对路径**：远程路径统一绝对路径操作，避免相对 cwd 叠加导致 550 CD issue。
+- **SFTP 流式传输**：部分 SFTP 网关不支持 paramiko `put()`/`get()`（连接被断开），改用 `open().write()/read()` 流式。
+
+### 3.12 自身备份设置超时与启用
+- 各协议有独立 `timeout`（默认 10s，GUI 可调 1-600s），接入 WebDAV/S3/FTP/SFTP。
+- GUI 打开时默认选中已启用协议；未勾选"启用"保存时询问是否启用。
+- 自身备份默认压缩（`compress=True`，GUI 默认勾选）。
+
 ## 4. 数据目录
 
 - 默认 `platformdirs.user_data_dir("BackupApp")`；`--data-dir` 可覆盖（便携模式 = exe 同目录 `data/`）。

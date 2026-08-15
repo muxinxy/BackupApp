@@ -117,14 +117,17 @@ class SelfRestoreWorker(QThread):
 
     done = Signal(bool, str)
 
-    def __init__(self, protocol: str, remote_name: str, parent=None):
+    def __init__(self, protocol: str, remote_name: str, overwrite: bool = True,
+                 parent=None):
         super().__init__(parent)
         self._protocol = protocol
         self._remote_name = remote_name
+        self._overwrite = overwrite
 
     def run(self):
         from ..protocols.runner import run_self_restore
-        r = run_self_restore(self._protocol, self._remote_name)
+        r = run_self_restore(self._protocol, self._remote_name,
+                             overwrite=self._overwrite)
         if r.ok:
             self.done.emit(True, f"已恢复 {r.files} 个文件")
         else:

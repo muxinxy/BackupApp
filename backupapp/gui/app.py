@@ -40,7 +40,7 @@ def main() -> int:
     if icon:
         w.setWindowIcon(icon)  # 窗口左上角图标
     applog.get_logger().info("GUI 启动")
-    w.show()
+    w.showMaximized()  # 默认全屏（最大化）打开
     return app.exec()
 
 

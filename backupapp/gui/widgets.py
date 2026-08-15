@@ -63,6 +63,7 @@ class PathListEditor(QWidget):
         lay.setContentsMargins(4, 2, 4, 2)
         lay.setSpacing(6)
         lbl = QLabel(p)
+        lbl.setToolTip(p)  # 长路径悬停显示完整内容
         lbl.setStyleSheet("border: none; background: transparent;")
         btn = QPushButton("✕")
         btn.setFixedSize(22, 22)

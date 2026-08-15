@@ -233,6 +233,7 @@ class SelfBackup:
     region: str = ""
     endpoint: str = ""
     use_ssl: bool = True
+    timeout: int = 10  # 连接/IO 超时（秒）
     retention: int = 30
     compress: bool = True
     format: str = "zip"
@@ -246,8 +247,9 @@ class SelfBackup:
                 "password": self.password, "credentialStore": self.credential_store,
                 "bucket": self.bucket, "region": self.region,
                 "endpoint": self.endpoint, "useSsl": self.use_ssl,
-                "retention": self.retention, "compress": self.compress,
-                "format": self.format, "archivePassword": self.archive_password,
+                "timeout": self.timeout, "retention": self.retention,
+                "compress": self.compress, "format": self.format,
+                "archivePassword": self.archive_password,
                 "localCopy": self.local_copy}
 
     @classmethod
@@ -264,6 +266,7 @@ class SelfBackup:
                    region=str(d.get("region", "")),
                    endpoint=str(d.get("endpoint", "")),
                    use_ssl=bool(d.get("useSsl", True)),
+                   timeout=int(d.get("timeout", 10)),
                    retention=int(d.get("retention", 30)),
                    compress=bool(d.get("compress", True)),
                    format=str(d.get("format", "zip")),

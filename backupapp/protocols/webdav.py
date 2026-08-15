@@ -26,13 +26,15 @@ class WebDAVUploader(Uploader):
         self.base = sb.host.rstrip("/")
         self.path = sb.remote_path.strip("/")
         self.auth = (sb.username, sb.password) if sb.username else None
+        self.timeout = sb.timeout or 10
 
     def _url(self, name: str = "") -> str:
         return f"{self.base}/{self.path}/{name}" if name else f"{self.base}/{self.path}"
 
     def _req(self, method: str, url: str, **kw) -> httpx.Response:
         kw.setdefault("follow_redirects", True)
-        return httpx.request(method, url, auth=self.auth, timeout=30, **kw)
+        kw.setdefault("timeout", self.timeout)
+        return httpx.request(method, url, auth=self.auth, **kw)
 
     def test(self) -> tuple[bool, str]:
         try:

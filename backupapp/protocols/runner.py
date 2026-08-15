@@ -140,9 +140,11 @@ def _find_self_root(staging: str) -> str | None:
     return None
 
 
-def run_self_restore(protocol: str, remote_name: str) -> SelfRestoreResult:
+def run_self_restore(protocol: str, remote_name: str,
+                     overwrite: bool = True) -> SelfRestoreResult:
     """从远程下载指定备份并恢复 data 目录（apps/ + settings.json）。
 
+    overwrite=False 时跳过本机已存在的应用（相同 id），其余照常恢复。
     安全网：恢复前把现有 data/apps 与 settings.json 移到 .old 时间戳目录。
     """
     try:
@@ -171,8 +173,16 @@ def run_self_restore(protocol: str, remote_name: str) -> SelfRestoreResult:
         # 恢复（apps 为空目录时 zip 可能不含该条目，这里兜底创建）
         os.makedirs(os.path.join(data, "apps"), exist_ok=True)
         if os.path.isdir(apps_dir):
-            shutil.copytree(apps_dir, os.path.join(data, "apps"),
-                            dirs_exist_ok=True)
+            if overwrite:
+                shutil.copytree(apps_dir, os.path.join(data, "apps"),
+                                dirs_exist_ok=True)
+            else:
+                # 仅恢复本机不存在的应用（同 id 保留现有）
+                for name in os.listdir(apps_dir):
+                    if name.endswith(".json") and not os.path.exists(
+                            os.path.join(data, "apps", name)):
+                        shutil.copy2(os.path.join(apps_dir, name),
+                                     os.path.join(data, "apps", name))
         shutil.copy2(settings_file, os.path.join(data, "settings.json"))
         n = len([f for f in os.listdir(os.path.join(data, "apps"))
                  if f.endswith(".json")])

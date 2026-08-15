@@ -272,6 +272,18 @@ class MainWindow(QMainWindow):
         for app in store.list_apps():
             item = QListWidgetItem(f"{app.name}  ({app.id})")
             item.setData(Qt.UserRole, app.id)
+            # 悬停显示完整应用信息（名称/ID/备注/路径数）
+            tip = f"{app.name}  ({app.id})"
+            extra = []
+            if app.note:
+                extra.append(app.note)
+            if app.config_paths:
+                extra.append(f"配置 {len(app.config_paths)} 项")
+            if app.data_paths:
+                extra.append(f"数据 {len(app.data_paths)} 项")
+            if extra:
+                tip += "\n" + "\n".join(extra)
+            item.setToolTip(tip)
             self.app_list.addItem(item)
         self.app_list.blockSignals(False)
         if select_id:
@@ -528,9 +540,35 @@ class MainWindow(QMainWindow):
                                               "配置 (*.json *.zip)")
         if not path:
             return
+        from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit
+        dlg = QDialog(self)
+        dlg.setWindowTitle("导入选项")
+        lay = QFormLayout(dlg)
+        is_zip = path.lower().endswith(".zip")
+        cb_overwrite = QCheckBox("覆盖同 ID 的应用")
+        cb_overwrite.setChecked(True)
+        lay.addRow(cb_overwrite)
+        pw = None
+        if is_zip:
+            cb_settings = QCheckBox("恢复全局设置（自身备份配置/主题等）")
+            cb_settings.setChecked(True)
+            lay.addRow(cb_settings)
+            pw = QLineEdit()
+            pw.setEchoMode(QLineEdit.Password)
+            pw.setPlaceholderText("加密导出则需输入密码")
+            lay.addRow("密码", pw)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addRow(btns)
+        if dlg.exec() != QDialog.Accepted:
+            return
         try:
-            ids = importexport.import_(path)
-            self._log(f"导入成功: {', '.join(ids)}")
+            ids = importexport.import_(
+                path, overwrite=cb_overwrite.isChecked(),
+                password=pw.text() if pw else "",
+                import_settings=cb_settings.isChecked() if is_zip else True)
+            self._log(f"导入成功: {', '.join(ids) if ids else '（无新应用）'}")
             self.refresh_apps(select_id=ids[0] if ids else None)
         except Exception as e:
             QMessageBox.critical(self, "导入失败", str(e))
@@ -556,8 +594,31 @@ class MainWindow(QMainWindow):
                                               "ZIP (*.zip)")
         if not path:
             return
-        ids = importexport.export_all(path)
-        self._log(f"导出 {len(ids)} 个应用 -> {path}")
+        from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit
+        dlg = QDialog(self)
+        dlg.setWindowTitle("导出选项")
+        lay = QFormLayout(dlg)
+        cb_encrypt = QCheckBox("加密压缩包（AES）")
+        lay.addRow(cb_encrypt)
+        pw = QLineEdit()
+        pw.setEchoMode(QLineEdit.Password)
+        pw.setEnabled(False)
+        pw.setPlaceholderText("导出密码")
+        lay.addRow("密码", pw)
+        cb_encrypt.toggled.connect(pw.setEnabled)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addRow(btns)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        password = pw.text() if cb_encrypt.isChecked() else ""
+        try:
+            ids = importexport.export_all(path, password=password)
+            self._log(f"导出 {len(ids)} 个应用 -> {path}"
+                      + ("（已加密）" if password else ""))
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", str(e))
 
     # ---------- 计划操作 ----------
 

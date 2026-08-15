@@ -22,9 +22,14 @@ class S3Uploader(Uploader):
         }
         if sb.endpoint:
             kwargs["endpoint_url"] = sb.endpoint
-        self.client = boto3.client("s3", **kwargs)
+        self.client = boto3.client("s3", **kwargs,
+                                   config=__import__("botocore").config.Config(
+                                       connect_timeout=sb.timeout or 10,
+                                       read_timeout=sb.timeout or 10,
+                                       retries={"max_attempts": 2}))
         self.bucket = sb.bucket
         self.prefix = sb.remote_path.strip("/")
+        self.timeout = sb.timeout or 10
 
     def _key(self, name: str = "") -> str:
         return f"{self.prefix}/{name}" if name else self.prefix
@@ -45,7 +50,7 @@ class S3Uploader(Uploader):
             "get_object",
             Params={"Bucket": self.bucket, "Key": self._key(remote_name)},
             ExpiresIn=300)
-        r = httpx.get(url, follow_redirects=True, timeout=60)
+        r = httpx.get(url, follow_redirects=True, timeout=self.timeout)
         if r.status_code != 200:
             raise RuntimeError(f"下载失败: HTTP {r.status_code} {r.text[:200]}")
         with open(local_path, "wb") as f:

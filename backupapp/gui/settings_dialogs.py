@@ -3,9 +3,9 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QHeaderView,
-                               QLabel, QLineEdit, QMessageBox, QPushButton,
-                               QSpinBox, QTableWidget, QTableWidgetItem,
-                               QVBoxLayout)
+                               QLabel, QLineEdit, QMessageBox, QProgressBar,
+                               QPushButton, QSpinBox, QTableWidget,
+                               QTableWidgetItem, QVBoxLayout)
 
 from .. import scheduler as sched
 from ..storage import store
@@ -26,8 +26,11 @@ class SelfBackupDialog(QDialog):
         cfg = store.load_settings()
         self._protocol = QComboBox()
         self._protocol.addItems(_PROTOCOLS)
-        self._old_sb = cfg.sb("webdav")
-        self._current_proto = "webdav"
+        # 默认显示已启用的协议（没有则 webdav）
+        enabled = [sb.protocol for sb in cfg.enabled_sbs()]
+        default_proto = enabled[0] if enabled else "webdav"
+        self._old_sb = cfg.sb(default_proto)
+        self._current_proto = default_proto
 
         self._enabled = QCheckBox("启用自身备份")
         self._host = QLineEdit()
@@ -42,6 +45,10 @@ class SelfBackupDialog(QDialog):
         self._credential_store = QComboBox()
         self._credential_store.addItems(["plain", "dpapi", "keyring"])
         self._use_ssl = QCheckBox("使用 SSL/TLS")
+        self._timeout = QSpinBox()
+        self._timeout.setRange(1, 600)
+        self._timeout.setValue(10)
+        self._timeout.setSuffix(" 秒")
         self._retention = QSpinBox()
         self._retention.setRange(1, 9999)
         self._retention.setValue(30)
@@ -70,16 +77,17 @@ class SelfBackupDialog(QDialog):
         form.addRow(self._s3_box)               # 7
         form.addRow("凭据存储", self._credential_store)  # 8
         form.addRow("", self._use_ssl)          # 9
-        form.addRow("远程保留份数", self._retention)  # 10
-        form.addRow("", self._compress)         # 11
-        form.addRow("压缩格式", self._format)   # 12
-        form.addRow("压缩包密码", self._archive_password)  # 13
-        form.addRow("", self._local_copy)       # 14
+        form.addRow("超时时间", self._timeout)  # 10
+        form.addRow("远程保留份数", self._retention)  # 11
+        form.addRow("", self._compress)         # 12
+        form.addRow("压缩格式", self._format)   # 13
+        form.addRow("压缩包密码", self._archive_password)  # 14
+        form.addRow("", self._local_copy)       # 15
         self._form = form
 
         self._test_btn = QPushButton("测试连接")
         self._test_btn.clicked.connect(self._test)
-        form.addRow(self._test_btn)             # 15
+        form.addRow(self._test_btn)             # 16
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self._save)
@@ -126,6 +134,7 @@ class SelfBackupDialog(QDialog):
         self._endpoint.setText(sb.endpoint)
         self._credential_store.setCurrentText(sb.credential_store or "plain")
         self._use_ssl.setChecked(sb.use_ssl)
+        self._timeout.setValue(sb.timeout or 10)
         self._retention.setValue(sb.retention or 30)
         self._compress.setChecked(sb.compress)
         self._format.setCurrentText(sb.format or "zip")
@@ -168,6 +177,7 @@ class SelfBackupDialog(QDialog):
             endpoint=self._endpoint.text().strip(),
             credential_store=self._credential_store.currentText(),
             use_ssl=self._use_ssl.isChecked(),
+            timeout=self._timeout.value(),
             retention=self._retention.value(),
             compress=self._compress.isChecked(),
             format=self._format.currentText(),
@@ -212,6 +222,14 @@ class SelfBackupDialog(QDialog):
         cfg = store.load_settings()
         # 各协议独立保存：写回当前协议配置，不影响其他协议
         sb = self._collect()
+        # 未勾选启用时询问：避免保存了配置却忘了启用导致备份不执行
+        if not sb.enabled:
+            ret = QMessageBox.question(
+                self, "自身备份",
+                "当前未勾选“启用自身备份”，保存后备份不会执行。\n"
+                "是否现在启用？")
+            if ret == QMessageBox.Yes:
+                sb.enabled = True
         old = store.load_settings().sb(sb.protocol)
         kind = sb.credential_store
         if kind == "plain":
@@ -384,8 +402,10 @@ class SelfBackupFilesDialog(QDialog):
 
         self._table = QTableWidget(0, 3)
         self._table.setHorizontalHeaderLabels(["文件名", "大小", "备份时间"])
-        self._table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.Stretch)
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.setSelectionMode(QTableWidget.SingleSelection)
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -407,6 +427,14 @@ class SelfBackupFilesDialog(QDialog):
         btns.addStretch(1)
         btns.addWidget(self._btn_close)
         lay.addLayout(btns)
+
+        # 操作进行中的不定进度动画（恢复/删除时显示）
+        self._busy_bar = QProgressBar()
+        self._busy_bar.setRange(0, 0)
+        self._busy_bar.setFixedHeight(8)
+        self._busy_bar.setTextVisible(False)
+        self._busy_bar.hide()
+        lay.addWidget(self._busy_bar)
 
         self._workers: list = []
         self._refresh()
@@ -438,10 +466,16 @@ class SelfBackupFilesDialog(QDialog):
         from ..protocols.base import RemoteFile  # noqa: F401 (类型提示)
         self._table.setRowCount(len(files))
         for row, f in enumerate(files):
-            self._table.setItem(row, 0, QTableWidgetItem(f.name))
-            self._table.setItem(row, 1, QTableWidgetItem(_fmt_size(f.size)))
-            self._table.setItem(row, 2, QTableWidgetItem(
-                f.mtime.replace("T", " ")[:19] if f.mtime else "-"))
+            name_item = QTableWidgetItem(f.name)
+            name_item.setToolTip(f.name)
+            size_item = QTableWidgetItem(_fmt_size(f.size))
+            size_item.setToolTip(f"{f.size} 字节" if f.size else "-")
+            ts = f.mtime.replace("T", " ")[:19] if f.mtime else "-"
+            time_item = QTableWidgetItem(ts)
+            time_item.setToolTip(f.mtime if f.mtime else "-")
+            self._table.setItem(row, 0, name_item)
+            self._table.setItem(row, 1, size_item)
+            self._table.setItem(row, 2, time_item)
 
     def _selected_name(self) -> str | None:
         row = self._table.currentRow()
@@ -456,16 +490,23 @@ class SelfBackupFilesDialog(QDialog):
         if not name:
             QMessageBox.information(self, "恢复", "请先选择一个备份文件")
             return
-        ret = QMessageBox.question(
-            self, "恢复自身备份",
-            f"将从远程恢复 {name}，覆盖当前 apps/ 与 settings.json？\n"
-            f"（恢复前会把当前数据移到 data/self_restore_old_* 备份）")
-        if ret != QMessageBox.Yes:
+        box = QMessageBox(self)
+        box.setWindowTitle("恢复自身备份")
+        box.setIcon(QMessageBox.Question)
+        box.setText(f"将从远程恢复 {name}，覆盖当前 apps/ 与 settings.json？\n"
+                    f"（恢复前会把当前数据移到 data/self_restore_old_* 备份）")
+        overwrite_btn = box.addButton("覆盖（推荐）", QMessageBox.YesRole)
+        merge_btn = box.addButton("仅新增（保留现有同 ID 应用）",
+                                  QMessageBox.NoRole)
+        cancel_btn = box.addButton("取消", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is cancel_btn:
             return
+        overwrite = box.clickedButton() is overwrite_btn
         from .workers import SelfRestoreWorker
         proto = self._protocol.currentText()
         self._set_busy(True)
-        w = SelfRestoreWorker(proto, name, self)
+        w = SelfRestoreWorker(proto, name, overwrite, self)
         self._workers.append(w)
 
         def _done(ok: bool, msg: str):
@@ -515,3 +556,7 @@ class SelfBackupFilesDialog(QDialog):
         for b in (self._btn_refresh, self._btn_restore, self._btn_delete,
                   self._protocol):
             b.setEnabled(not busy)
+        # 进行中显示不定进度动画（右下角状态栏同样由主窗口 busy_bar 呈现）
+        self._busy_bar.setVisible(busy)
+        if busy:
+            self._status.setText("处理中...")

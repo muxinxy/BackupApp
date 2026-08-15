@@ -16,7 +16,7 @@
 - **凭据安全**：DPAPI（Windows 原生加密）/ keyring（跨平台 OS 凭据库）/ plain 三种存储方式
 - **自身备份 / 恢复**：备份本工具自身配置（apps/ + settings.json）到远程（FTP/SFTP/S3/WebDAV），各协议配置独立保存；GUI 可查看远程备份文件列表（文件名/大小/时间），支持**恢复**与**删除**单个备份；恢复前自动把当前数据移到 `data/self_restore_old_*` 安全网
 - **远程网关兼容**：WebDAV 兼容 OpenList 等网关（标准 `{DAV:}` 命名空间、href URL 解码、GET 302 签名地址跟随）；S3 经 CDN/OSS 网关时列表/下载可用（boto3 + presigned URL）
-- **导入 / 导出**：配置整体导出为 zip 并可重新导入迁移
+- **导入 / 导出**：配置整体导出为 zip 并可重新导入迁移。导出可选 AES 加密；导入可选是否覆盖同 ID 应用、是否恢复全局设置（自身备份配置/主题等）；加密 zip 需输入密码
 
 ## 安装
 
