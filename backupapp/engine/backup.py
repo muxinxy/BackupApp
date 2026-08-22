@@ -7,7 +7,7 @@ from datetime import datetime
 
 from .. import logging
 from ..storage import store
-from . import compress, link as linkmod, paths, retention
+from . import compress, hooks, link as linkmod, paths, retention
 
 
 @dataclass
@@ -41,6 +41,9 @@ def run_plan(plan_key: str) -> BackupResult:
             linkmod.ensure_linked(srcs[0], live_dir, plan.link_type)
             srcs = [live_dir] + srcs[1:]
 
+        # 前置钩子：失败（非零/超时）则中止备份
+        hooks.run_hook(plan.pre_cmd, plan.cmd_timeout, plan_key, "备份前")
+
         snapshot = datetime.now().strftime("%Y%m%d_%H%M%S")
         entry = retention.entry_path(dest, app.id, snapshot, plan.compress, plan.format)
         if plan.compress:
@@ -50,6 +53,12 @@ def run_plan(plan_key: str) -> BackupResult:
             files, size = compress.copy_tree(srcs, entry, plan.exclude)
         pruned = retention.prune(dest, app.id, plan.retention, plan.keep_monthly,
                                  plan.keep_yearly, plan.retention_unit)
+
+        # 后置钩子：失败仅记录日志，不影响备份结果
+        try:
+            hooks.run_hook(plan.post_cmd, plan.cmd_timeout, plan_key, "备份后")
+        except RuntimeError as e:
+            logging.get_logger().warning("[%s] 备份后钩子失败: %s", plan_key, e)
 
         plan.last_run_at = datetime.now().isoformat(timespec="seconds")
         plan.updated_at = plan.last_run_at

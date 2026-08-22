@@ -58,6 +58,9 @@ class BackupPlan:
     backup_mode: str = "copy"    # copy | link（备份后源路径替换为指向 destination 的链接）
     restore_mode: str = "copy"   # copy | link（恢复时重建链接而非拷贝回源路径）
     link_type: str = "junction"  # junction | symlink
+    pre_cmd: str = ""            # 备份开始前执行的命令/脚本（非零退出或超时则中止备份）
+    post_cmd: str = ""           # 备份完成后执行的命令/脚本（失败仅记录日志，不影响结果）
+    cmd_timeout: int = 60        # 命令/脚本超时（秒）
     schedule_mode: str = "global"          # global | custom（计划任务排期：与全局一致或自定义）
     schedule_frequency: str = "daily"      # daily | weekly | atLogon | days | hourly | minutely
     schedule_time: str = "02:30"
@@ -86,6 +89,9 @@ class BackupPlan:
             "backupMode": self.backup_mode,
             "restoreMode": self.restore_mode,
             "linkType": self.link_type,
+            "preCmd": self.pre_cmd,
+            "postCmd": self.post_cmd,
+            "cmdTimeout": self.cmd_timeout,
             "scheduleMode": self.schedule_mode,
             "scheduleFrequency": self.schedule_frequency,
             "scheduleTime": self.schedule_time,
@@ -116,6 +122,9 @@ class BackupPlan:
             backup_mode=str(d.get("backupMode", "copy")),
             restore_mode=str(d.get("restoreMode", "copy")),
             link_type=str(d.get("linkType", "junction")),
+            pre_cmd=str(d.get("preCmd", "")),
+            post_cmd=str(d.get("postCmd", "")),
+            cmd_timeout=int(d.get("cmdTimeout", 60)),
             schedule_mode=str(d.get("scheduleMode", "global")),
             schedule_frequency=str(d.get("scheduleFrequency", "daily")),
             schedule_time=str(d.get("scheduleTime", "02:30")),

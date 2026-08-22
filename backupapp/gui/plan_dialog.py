@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
 
 from ..engine.paths import compact
 from ..model import AppConfig, BackupPlan, now_iso
-from .widgets import PathListEditor
+from .widgets import PathListEditor, WheelLock
 
 
 class PlanDialog(QDialog):
@@ -51,6 +51,7 @@ class PlanDialog(QDialog):
         preset_row.addWidget(btn_preset)
 
         self._retention = QSpinBox()
+        self._wheel_locks = [WheelLock(self._retention)]  # 持引用防 GC，禁滚轮保留输入
         self._retention.setRange(1, 9999)
         self._retention.setValue(plan.retention if plan else 14)
         self._retention_unit = QComboBox()
@@ -87,6 +88,21 @@ class PlanDialog(QDialog):
         self._link_type.addItem("junction（免管理员，推荐）", "junction")
         self._link_type.addItem("symlink（需管理员/开发者模式）", "symlink")
         self._link_type.setCurrentIndex(0 if (plan is None or plan.link_type == "junction") else 1)
+
+        # 命令/脚本钩子：备份前/后执行，可设超时
+        self._pre_cmd = QLineEdit(plan.pre_cmd if plan else "")
+        self._pre_cmd.setPlaceholderText(
+            "备份开始前执行（非零退出或超时则中止本次备份），如 net stop MyService")
+        self._post_cmd = QLineEdit(plan.post_cmd if plan else "")
+        self._post_cmd.setPlaceholderText(
+            "备份完成后执行（失败仅记日志），如 net start MyService")
+        self._cmd_timeout = QSpinBox()
+        self._wheel_locks.append(WheelLock(self._cmd_timeout))
+        self._cmd_timeout.setRange(1, 3600)
+        self._cmd_timeout.setValue(plan.cmd_timeout if plan else 60)
+        self._cmd_timeout.setSuffix(" 秒")
+        timeout_row = QHBoxLayout()
+        timeout_row.addWidget(self._cmd_timeout)
 
         # 计划任务排期：与全局一致，或自定义
         self._schedule_mode = QComboBox()
@@ -141,6 +157,9 @@ class PlanDialog(QDialog):
         form.addRow("备份方式", self._backup_mode)
         form.addRow("恢复方式", self._restore_mode)
         form.addRow("链接类型", self._link_type)
+        form.addRow("备份前命令", self._pre_cmd)
+        form.addRow("备份后命令", self._post_cmd)
+        form.addRow("命令超时", timeout_row)
         form.addRow("计划任务", self._schedule_mode)
         form.addRow("频率", freq_row)
         form.addRow("时间", self._schedule_time)
@@ -214,6 +233,9 @@ class PlanDialog(QDialog):
         p.backup_mode = self._backup_mode.currentData()
         p.restore_mode = self._restore_mode.currentData()
         p.link_type = self._link_type.currentData()
+        p.pre_cmd = self._pre_cmd.text().strip()
+        p.post_cmd = self._post_cmd.text().strip()
+        p.cmd_timeout = self._cmd_timeout.value()
         p.schedule_mode = self._schedule_mode.currentData()
         p.schedule_frequency = self._schedule_freq.currentData()
         p.schedule_time = self._schedule_time.currentData()

@@ -117,6 +117,17 @@ scripts/            冒烟测试（见第 5 节）
 - GUI 打开时默认选中已启用协议；未勾选"启用"保存时询问是否启用。
 - 自身备份默认压缩（`compress=True`，GUI 默认勾选）。
 
+### 3.13 备份计划命令钩子（engine/hooks.py）
+- `BackupPlan.pre_cmd` / `post_cmd` / `cmd_timeout`（JSON：`preCmd`/`postCmd`/`cmdTimeout`，默认 60s）。
+- `run_hook(cmd, timeout, plan_key, when)`：shell 执行（Windows cmd / sh），非零退出码或超时抛 `RuntimeError`。
+- `backup.run_plan`：前置钩子失败中止备份；后置钩子失败仅 warning，不影响备份结果。
+- GUI 计划对话框：备份前/备份后命令输入框 + 超时（单位秒，可手动输入）。
+
+### 3.14 数值框滚轮锁定（gui/widgets.py WheelLock）
+- 滚轮事件会误改 QSpinBox 数值；`WheelLock` 事件过滤器拦截滚轮（转发给滚动区），
+  保留聚焦与手动输入。**必须持有引用**（如 `self._wheel_locks`），否则被 GC 后拦截失效。
+- 已应用：计划对话框的保留份数、命令超时。
+
 ## 4. 数据目录
 
 - 默认 `platformdirs.user_data_dir("BackupApp")`；`--data-dir` 可覆盖（便携模式 = exe 同目录 `data/`）。

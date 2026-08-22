@@ -2,11 +2,43 @@
 
 import os
 
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel, QListWidget,
-                               QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtCore import QEvent, QObject, QSize, Qt
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
+                               QListWidget, QListWidgetItem, QPushButton,
+                               QScrollArea, QVBoxLayout, QWidget)
 
 from ..engine.paths import compact
+
+
+class WheelLock(QObject):
+    """滚轮锁定：拦截目标的滚轮事件（不转发），保留聚焦与手动输入。
+
+    用于数值框——滚轮误触改值，但键盘输入/直接输入仍可用。
+    QSpinBox 的滚轮可能由内部 QLineEdit 子控件接收，因此对目标及其
+    所有子控件统一安装过滤器。
+    """
+
+    def __init__(self, widget, parent=None):
+        super().__init__(parent)
+        self._widget = widget
+        self._install(widget)
+
+    def _install(self, w):
+        w.installEventFilter(self)
+        for child in w.findChildren(QWidget):
+            child.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel:
+            # 转发给外层滚动区，保持页面可滚动
+            p = self._widget.parent()
+            while p is not None:
+                if isinstance(p, QScrollArea):
+                    QApplication.sendEvent(p.viewport(), event)
+                    break
+                p = p.parent()
+            return True
+        return False
 
 
 class PathListEditor(QWidget):
@@ -18,6 +50,7 @@ class PathListEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._list = QListWidget()
+        self._list.setMinimumHeight(120)  # 源路径列表加高，长路径更易浏览
         self._list.setSelectionMode(QListWidget.SingleSelection)
         # 行内 itemWidget 自带边距，屏蔽全局 QListWidget::item padding 防裁切
         self._list.setStyleSheet(

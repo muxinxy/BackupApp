@@ -1,10 +1,10 @@
 {
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "应用配置与数据备份工具：备份应用到本地目录或远程存储（FTP/SFTP/S3/WebDAV），支持压缩加密、保留策略与计划任务",
     "homepage": "https://github.com/muxinxy/BackupApp",
     "license": "MIT",
-    "url": "https://github.com/muxinxy/BackupApp/releases/download/v1.0.2/backupapp-windows-x64.zip",
-    "hash": "71e1c36cdea484b70e62af3d56b4f0ce70cdaf8a6d6e83cd396e0b0a23db34e5",
+    "url": "https://github.com/muxinxy/BackupApp/releases/download/v1.0.3/backupapp-windows-x64.zip",
+    "hash": "65dcee9c04c6c93aac930b8357bd668b39b91286481a526bfa711bbeadc4c7b3",
     "bin": [
         ["backupapp\\backupapp-cli.exe", "backupapp"]
     ],
