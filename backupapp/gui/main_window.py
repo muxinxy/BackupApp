@@ -909,6 +909,12 @@ class MainWindow(QMainWindow):
             self.log_view.setPlainText("".join(lines))
         except OSError:
             pass
+        # 加载后直接跳到底部（setPlainText 默认停在顶部）
+        sb = self.log_view.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
     def _log(self, text: str):
         self.log_view.appendPlainText(text)
+        # 追加后强制滚动到底部（appendPlainText 在用户上翻过时不自动跟随）
+        sb = self.log_view.verticalScrollBar()
+        sb.setValue(sb.maximum())

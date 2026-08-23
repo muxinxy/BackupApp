@@ -87,7 +87,9 @@ scripts/            冒烟测试（见第 5 节）
 
 ### 3.7 计划任务
 - Windows 任务计划程序；全局任务 `backup --all`，计划级任务指向具体计划。
-- 任务名按 `backupapp_<app>_<plan>` 生成，GUI 用缓存查询避免每行起子进程。
+- 任务名按 `backupapp_<app>_<plan>` 生成。
+- **查询合并**：`status` / `plan_status` / `registered_plan_tasks` 共用一次缓存的 `schtasks /query /v`（TTL 5 秒，`_tasks_table`），列按表头定位（中英文表头、部分系统多主机名列），避免 GUI 每次切换/刷新起子进程；子进程统一 20 秒超时。
+- **scoop 兼容**：冻结运行时 `_stable_exe()` 检测 `\apps\<app>\<version>\` 布局时把版本目录换成 `current` 链接（存在才换），升级后任务不失效；已注册的旧版路径任务会显示 pathMismatch，重新点"注册"即更新。
 
 ### 3.8 GUI 线程模型
 - 所有 I/O（备份/恢复/测试/远程列表）走 `gui/workers.py` 的 QThread，不冻结界面。

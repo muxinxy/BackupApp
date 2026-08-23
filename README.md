@@ -28,7 +28,7 @@ scoop bucket add mxy https://github.com/muxinxy/scoop-bucket
 scoop install mxy/backupapp
 ```
 
-安装后开始菜单出现 **BackupApp** 快捷方式（GUI），命令行可用 `backupapp`（即 `backupapp-cli.exe`）。配置与数据保存在 `backupapp\data`，已配置 persist，`scoop update` 升级不丢失。
+安装后开始菜单出现 **BackupApp** 快捷方式（GUI），命令行可用 `backupapp`（即 `backupapp-cli.exe`）。配置与数据保存在 `backupapp\data`，已配置 persist，`scoop update` 升级不丢失。注册的计划任务指向 `current` 链接，升级后不会失效（升级后界面提示"路径变更，需重新应用"时点一次"注册"即可）。
 
 ### 源码运行
 
