@@ -45,9 +45,14 @@ def _count(files: list[tuple[str, str]]) -> tuple[int, int]:
 
 
 def create_archive(src_dirs: list[str], archive_path: str, fmt: str,
-                   password: str, excludes: list[str]) -> tuple[int, int]:
-    """压缩 src_dirs 到 archive_path，返回 (文件数, 字节数)。"""
+                   password: str, excludes: list[str],
+                   progress=None) -> tuple[int, int]:
+    """压缩 src_dirs 到 archive_path，返回 (文件数, 字节数)。
+
+    progress(arc, i, total) 每写一个文件回调一次（可选）。
+    """
     items = list(_iter_files(src_dirs, excludes))
+    total = len(items)
     if fmt == "zip":
         import pyzipper
         if password:
@@ -55,24 +60,32 @@ def create_archive(src_dirs: list[str], archive_path: str, fmt: str,
                                      compression=pyzipper.ZIP_DEFLATED) as z:
                 z.setpassword(password.encode("utf-8"))
                 z.setencryption(pyzipper.WZ_AES)
-                for full, arc in items:
+                for i, (full, arc) in enumerate(items, 1):
                     z.write(full, arc)
+                    if progress:
+                        progress(arc, i, total)
         else:
             with pyzipper.ZipFile(archive_path, "w",
                                   compression=pyzipper.ZIP_DEFLATED) as z:
-                for full, arc in items:
+                for i, (full, arc) in enumerate(items, 1):
                     z.write(full, arc)
+                    if progress:
+                        progress(arc, i, total)
     elif fmt == "7z":
         import py7zr
         with py7zr.SevenZipFile(archive_path, "w",
                                 password=password or None) as z:
-            for full, arc in items:
+            for i, (full, arc) in enumerate(items, 1):
                 z.write(full, arc)
+                if progress:
+                    progress(arc, i, total)
     elif fmt == "tar.gz":
         import tarfile
         with tarfile.open(archive_path, "w:gz") as t:
-            for full, arc in items:
+            for i, (full, arc) in enumerate(items, 1):
                 t.add(full, arcname=arc)
+                if progress:
+                    progress(arc, i, total)
     else:
         raise ValueError(f"不支持的压缩格式: {fmt}")
     return _count(items)
@@ -101,17 +114,25 @@ def extract_archive(archive_path: str, dest_dir: str, password: str) -> None:
         raise ValueError(f"不支持的压缩格式: {archive_path}")
 
 
-def copy_tree(src_dirs: list[str], entry: str, excludes: list[str]) -> tuple[int, int]:
-    """非压缩备份：拷贝为目录树 entry/。返回 (文件数, 字节数)。"""
+def copy_tree(src_dirs: list[str], entry: str, excludes: list[str],
+              progress=None) -> tuple[int, int]:
+    """非压缩备份：拷贝为目录树 entry/。返回 (文件数, 字节数)。
+
+    progress(arc, i, total) 每拷贝一个文件回调一次（可选）。
+    """
     os.makedirs(entry, exist_ok=True)
-    n, total = 0, 0
-    for full, arc in _iter_files(src_dirs, excludes):
+    items = list(_iter_files(src_dirs, excludes))
+    total = len(items)
+    n, total_bytes = 0, 0
+    for i, (full, arc) in enumerate(items, 1):
         dst = os.path.join(entry, arc)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(full, dst)
         n += 1
         try:
-            total += os.path.getsize(full)
+            total_bytes += os.path.getsize(full)
         except OSError:
             pass
-    return n, total
+        if progress:
+            progress(arc, i, total)
+    return n, total_bytes

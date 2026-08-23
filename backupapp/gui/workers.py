@@ -11,6 +11,7 @@ from ..storage import lock
 class BackupWorker(QThread):
     result = Signal(str, bool, str)  # plan_key, ok, 详情
     finished_all = Signal(int, int)  # 成功数, 总数
+    progress = Signal(str)           # 备份进度行（后台节流后发主线程日志）
 
     def __init__(self, fn, parent=None):
         super().__init__(parent)
@@ -21,9 +22,20 @@ class BackupWorker(QThread):
         self.finished_all.emit(0, 1)
 
     def run(self):
+        import time
+        _last = [0.0]
+
+        def _progress(msg: str):
+            # 节流：最快每 150ms 一条，避免大目录刷爆日志
+            now = time.monotonic()
+            if now - _last[0] < 0.15:
+                return
+            _last[0] = now
+            self.progress.emit(msg)
+
         try:
             with lock.DataLock(lock.lock_path()):
-                out = self._fn()
+                out = self._fn(_progress)
         except RuntimeError as e:  # 锁被占用
             self._emit_error(str(e))
             return
@@ -74,6 +86,43 @@ class RestoreWorker(QThread):
                 msg = f"失败: {getattr(r, 'error', '未知错误')}"
             self.result.emit(getattr(r, "plan_key", "-"), ok, msg)
         self.finished_all.emit(ok_n, len(out))
+
+
+class BatchTaskWorker(QThread):
+    """批量注册/取消计划任务（后台逐条调 schtasks，不冻结界面）。"""
+
+    result = Signal(str, bool, str)  # plan_key, ok, 详情
+    finished_all = Signal(int, int)  # 成功数, 尝试总数
+
+    def __init__(self, register: bool, parent=None):
+        super().__init__(parent)
+        self._register = register
+
+    def run(self):
+        from .. import scheduler as sched
+        from ..storage import store
+        cfg = store.load_settings()
+        plans = [(a.id, p) for a in store.list_apps() for p in a.plans if p.enabled]
+        reg = sched.registered_plan_tasks()
+        ok = total = 0
+        for app_id, p in plans:
+            name = sched.plan_task_name(app_id, p.id)
+            if self._register:
+                if name in reg:
+                    continue
+                err = sched.plan_install(cfg, app_id, p.id)
+            else:
+                if name not in reg:
+                    continue
+                err = sched.plan_uninstall(app_id, p.id)
+            total += 1
+            if err:
+                self.result.emit(f"{app_id}/{p.id}", False, err)
+            else:
+                ok += 1
+                self.result.emit(f"{app_id}/{p.id}", True,
+                                 "已注册" if self._register else "已取消注册")
+        self.finished_all.emit(ok, total)
 
 
 class TestWorker(QThread):

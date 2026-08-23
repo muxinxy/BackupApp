@@ -469,51 +469,42 @@ class MainWindow(QMainWindow):
         self.refresh_plans()  # 刷新表格任务列与按钮状态
 
     def _task_batch_register(self):
-        """批量注册所有已启用计划的系统任务。"""
-        from .. import scheduler as sched
-        cfg = store.load_settings()
-        plans = [(a.id, p) for a in store.list_apps() for p in a.plans if p.enabled]
-        if not plans:
+        """批量注册所有已启用计划的系统任务（后台执行，不冻结界面）。"""
+        if not any(p.enabled for a in store.list_apps() for p in a.plans):
             QMessageBox.information(self, "批量注册任务", "没有已启用的计划")
             return
-        reg = sched.registered_plan_tasks()
-        ok = fail = 0
-        for app_id, p in plans:
-            if sched.plan_task_name(app_id, p.id) in reg:
-                continue
-            err = sched.plan_install(cfg, app_id, p.id)
-            if err:
-                fail += 1
-                self._log(f"注册失败 {app_id}/{p.id}: {err}")
-            else:
-                ok += 1
-        self._log(f"批量注册任务完成：新增 {ok} 个，失败 {fail} 个")
-        if fail:
-            QMessageBox.warning(self, "批量注册任务", f"{fail} 个计划注册失败，详见日志")
-        self.refresh_apps()
+        self._run_batch_worker("批量注册任务", True)
 
     def _task_batch_unregister(self):
-        """批量取消注册所有已启用计划的系统任务。"""
-        from .. import scheduler as sched
-        plans = [(a.id, p) for a in store.list_apps() for p in a.plans if p.enabled]
-        if not plans:
+        """批量取消注册所有已启用计划的系统任务（后台执行）。"""
+        if not any(p.enabled for a in store.list_apps() for p in a.plans):
             QMessageBox.information(self, "批量取消注册任务", "没有已启用的计划")
             return
-        reg = sched.registered_plan_tasks()
-        ok = fail = 0
-        for app_id, p in plans:
-            if sched.plan_task_name(app_id, p.id) not in reg:
-                continue
-            err = sched.plan_uninstall(app_id, p.id)
-            if err:
-                fail += 1
-                self._log(f"取消注册失败 {app_id}/{p.id}: {err}")
-            else:
-                ok += 1
-        self._log(f"批量取消注册任务完成：取消 {ok} 个，失败 {fail} 个")
+        self._run_batch_worker("批量取消注册任务", False)
+
+    def _run_batch_worker(self, label: str, register: bool):
+        if self._workers:
+            return
+        from .workers import BatchTaskWorker
+        self._log(f"—— {label} 开始 ——")
+        self._set_busy(True)
+        self.status_label.setText(f"{label} 进行中…")
+        self.busy_bar.show()
+        w = BatchTaskWorker(register, self)
+        w.result.connect(self._on_worker_result)
+        w.finished_all.connect(lambda ok, total, lb=label: self._on_batch_done(ok, total, lb))
+        w.finished.connect(self._on_worker_finished)
+        self._workers.append(w)
+        w.start()
+
+    def _on_batch_done(self, ok: int, total: int, label: str):
+        fail = total - ok
+        self._log(f"—— {label} 完成：成功 {ok} 个，失败 {fail} 个 ——")
         if fail:
-            QMessageBox.warning(self, "批量取消注册任务", f"{fail} 个计划取消注册失败，详见日志")
-        self.refresh_apps()
+            QMessageBox.warning(self, label, f"{fail} 个计划操作失败，详见日志")
+        self.refresh_apps()  # 刷新任务列与注册状态
+        self.sched_group.refresh_status()
+        self.status_label.setText("完成" if not fail else f"完成，{fail} 个失败")
 
     def _app_delete(self):
         if not self._app_id:
@@ -705,13 +696,19 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "提示", "请先选择一个计划")
             return
         key = f"{self._app_id}/{plan.id}"
-        self._run_worker(f"备份 {key}", lambda: __import__(
-            "backupapp.engine.backup", fromlist=["run_plan"]).run_plan(key),
-            BackupWorker)
+
+        def _do(cb):
+            from ..engine.backup import run_plan
+            return run_plan(key, progress=cb)
+
+        self._run_worker(f"备份 {key}", _do, BackupWorker)
 
     def _backup_all(self):
-        from ..engine import backup as bk
-        self._run_worker("备份全部", bk.run_all, BackupWorker)
+        def _do(cb):
+            from ..engine.backup import run_all
+            return run_all(progress=cb)
+
+        self._run_worker("备份全部", _do, BackupWorker)
 
     def _plan_restore(self):
         plan = self._selected_plan()
@@ -778,6 +775,8 @@ class MainWindow(QMainWindow):
         w.result.connect(self._on_worker_result)
         w.finished_all.connect(lambda ok, total, lb=label: self._on_worker_done(ok, total, lb))
         w.finished.connect(self._on_worker_finished)
+        if hasattr(w, "progress"):
+            w.progress.connect(self._log)
         self._workers.append(w)
         w.start()
 
@@ -805,6 +804,9 @@ class MainWindow(QMainWindow):
                   self.btn_restore, self.btn_plan_new, self.btn_plan_edit,
                   self.btn_plan_script, self.btn_plan_task, self.btn_plan_del):
             w.setEnabled(not busy)
+        # 导航与表格也锁住，避免进行中切换应用/点计划触发刷新
+        self.app_list.setEnabled(not busy)
+        self.plan_table.setEnabled(not busy)
         self.sched_group.setEnabled(not busy)
 
     # ---------- 其它 ----------
@@ -824,8 +826,11 @@ class MainWindow(QMainWindow):
         self._log("自身备份数据已变更，界面已刷新")
 
     def _self_backup_now(self):
-        from ..protocols.runner import run_self_backup
-        self._run_worker("自身备份", run_self_backup, BackupWorker)
+        def _do(cb):
+            from ..protocols.runner import run_self_backup
+            return run_self_backup()
+
+        self._run_worker("自身备份", _do, BackupWorker)
 
     def _script_dialog(self):
         """生成单个计划（选中）的备份/恢复一体脚本。"""

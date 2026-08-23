@@ -23,7 +23,18 @@ class BackupResult:
     pruned: int = 0
 
 
-def run_plan(plan_key: str) -> BackupResult:
+def _mk_progress(plan_key: str, cb):
+    """把压缩层的 (arc, i, total) 进度包装成带 plan_key 的消息回调。"""
+    if cb is None:
+        return None
+
+    def _p(arc: str, i: int, total: int):
+        cb(f"{plan_key} [{i}/{total}] {arc}")
+    return _p
+
+
+def run_plan(plan_key: str, progress=None) -> BackupResult:
+    """执行单个计划备份；progress(msg) 可选，每文件回调一次（供 GUI 实时显示）。"""
     start = time.time()
     try:
         pair = store.load_plan(*plan_key.split("/", 1))
@@ -46,11 +57,13 @@ def run_plan(plan_key: str) -> BackupResult:
 
         snapshot = datetime.now().strftime("%Y%m%d_%H%M%S")
         entry = retention.entry_path(dest, app.id, snapshot, plan.compress, plan.format)
+        p = _mk_progress(plan_key, progress)
         if plan.compress:
             files, size = compress.create_archive(srcs, entry, plan.format,
-                                                  plan.password, plan.exclude)
+                                                  plan.password, plan.exclude,
+                                                  progress=p)
         else:
-            files, size = compress.copy_tree(srcs, entry, plan.exclude)
+            files, size = compress.copy_tree(srcs, entry, plan.exclude, progress=p)
         pruned = retention.prune(dest, app.id, plan.retention, plan.keep_monthly,
                                  plan.keep_yearly, plan.retention_unit)
 
@@ -84,18 +97,19 @@ def run_plan(plan_key: str) -> BackupResult:
                             duration_s=time.time() - start)
 
 
-def run_all() -> list[BackupResult]:
+def run_all(progress=None) -> list[BackupResult]:
     results = []
     for app in store.list_apps():
         for plan in app.plans:
             if not plan.enabled:
                 continue
-            results.append(run_plan(f"{app.id}/{plan.id}"))
+            results.append(run_plan(f"{app.id}/{plan.id}", progress=progress))
     return results
 
 
-def run_app(app_id: str) -> list[BackupResult]:
+def run_app(app_id: str, progress=None) -> list[BackupResult]:
     app = store.load_app(app_id)
     if not app:
         raise ValueError(f"应用不存在: {app_id}")
-    return [run_plan(f"{app.id}/{p.id}") for p in app.plans if p.enabled]
+    return [run_plan(f"{app.id}/{p.id}", progress=progress)
+            for p in app.plans if p.enabled]
