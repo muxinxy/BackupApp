@@ -155,7 +155,7 @@ scripts\build.ps1          # 一键构建（用 python -m PyInstaller，勿用 .
 ```
 
 ### 6.2 发布新版本（发布者执行）
-1. 升版本号：`pyproject.toml` + `backupapp/__init__.py` + `backupapp.json`（scoop manifest 的 version/url）
+1. 升版本号：`pyproject.toml` + `backupapp/__init__.py`（scoop manifest 在 `muxinxy/scoop-bucket` 仓库单独维护，发版后同步其 version/url/hash）
 2. 更新 README 功能清单与 changelog
 3. 构建 exe（上一步）
 4. 打 zip：`dist\backupapp-windows-x64.zip`（压缩 `dist\backupapp\` 内容，zip 内直接是 `backupapp\...`）
