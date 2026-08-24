@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .. import logging
 from ..storage import store
+from ..util import format_size
 from . import compress, hooks, link as linkmod, paths, retention
 
 
@@ -78,8 +79,8 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
         plan.last_result = "ok"
         store.save_app(app)
         logging.get_logger().info(
-            "backup ok %s -> %s (%d files, %d bytes, pruned %d)",
-            plan_key, entry, files, size, pruned)
+            "backup ok %s -> %s (%d files, %s, pruned %d)",
+            plan_key, entry, files, format_size(size), pruned)
         return BackupResult(True, plan_key, snapshot, entry, files, size,
                             time.time() - start, None, pruned)
     except Exception as e:

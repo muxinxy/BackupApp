@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
 
 from .. import scheduler as sched
 from ..storage import store
+from ..util import format_size as _fmt_size
 
 _PROTOCOLS = ["webdav", "s3", "ftp", "sftp"]
 _FREQ_LABEL = {"daily": "每天", "weekly": "每周", "days": "每N天",
@@ -362,16 +363,6 @@ class SchedulerGroup(QGroupBox):
             if err:
                 QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
         self.refresh_status()
-
-
-def _fmt_size(n: int) -> str:
-    if n <= 0:
-        return "-"
-    for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024:
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} TB"
 
 
 class SelfBackupFilesDialog(QDialog):

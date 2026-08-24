@@ -6,6 +6,7 @@ worker 内统一加文件锁，防止与系统计划任务的备份进程并发�
 from PySide6.QtCore import QThread, Signal
 
 from ..storage import lock
+from ..util import format_size
 
 
 class BackupWorker(QThread):
@@ -49,7 +50,7 @@ class BackupWorker(QThread):
             ok = bool(getattr(r, "ok", False))
             ok_n += int(ok)
             if ok:
-                msg = f"{getattr(r, 'files', 0)} 文件 / {getattr(r, 'bytes', 0)} 字节"
+                msg = f"{getattr(r, 'files', 0)} 文件 / {format_size(getattr(r, 'bytes', 0))}"
                 if getattr(r, "pruned", 0):
                     msg += f" / 清理 {getattr(r, 'pruned', 0)} 个旧备份"
             else:

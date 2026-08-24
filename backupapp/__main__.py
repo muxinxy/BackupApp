@@ -17,6 +17,7 @@ import sys
 
 from . import __version__, scheduler
 from .storage import importexport, lock, store
+from .util import format_size
 
 
 def _die(msg: str, code: int = 1):
@@ -42,7 +43,7 @@ def cmd_backup(args) -> int:
         _die(str(e))
     for r in results:
         status = "OK " if r.ok else "FAIL"
-        extra = f"{r.files} files, {r.bytes} bytes, pruned {r.pruned}" if r.ok else f": {r.error}"
+        extra = f"{r.files} files, {format_size(r.bytes)}, pruned {r.pruned}" if r.ok else f": {r.error}"
         print(f"[{status}] {r.plan_key} -> {r.archive_path or '-'} {extra}")
     return 0 if all(r.ok for r in results) else 1
 
@@ -76,8 +77,8 @@ def cmd_self_backup(args) -> int:
     results = run_self_backup(protocol=args.protocol)
     for r in results:
         if r.ok:
-            print(f"OK {r.remote_name} -> {r.remote} ({r.files} 文件, {r.bytes} 字节, "
-                  f"清理 {r.pruned} 个旧备份)")
+            print(f"OK {r.remote_name} -> {r.remote} ({r.files} 文件, "
+                  f"{format_size(r.bytes)}, 清理 {r.pruned} 个旧备份)")
             if r.local_path:
                 print(f"   本地副本: {r.local_path}")
         else:
