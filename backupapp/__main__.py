@@ -16,12 +16,13 @@ import os
 import sys
 
 from . import __version__, scheduler
+from .i18n import _
 from .storage import importexport, lock, store
 from .util import format_size
 
 
 def _die(msg: str, code: int = 1):
-    print(f"error: {msg}", file=sys.stderr)
+    print(_("error: {msg}").format(msg=msg), file=sys.stderr)
     sys.exit(code)
 
 
@@ -43,7 +44,9 @@ def cmd_backup(args) -> int:
         _die(str(e))
     for r in results:
         status = "OK " if r.ok else "FAIL"
-        extra = f"{r.files} files, {format_size(r.bytes)}, pruned {r.pruned}" if r.ok else f": {r.error}"
+        extra = (_("{files} files, {size}, pruned {pruned}").format(
+                     files=r.files, size=format_size(r.bytes), pruned=r.pruned)
+                 if r.ok else _(": {error}").format(error=r.error))
         print(f"[{status}] {r.plan_key} -> {r.archive_path or '-'} {extra}")
     return 0 if all(r.ok for r in results) else 1
 
@@ -51,8 +54,9 @@ def cmd_backup(args) -> int:
 def cmd_restore(args) -> int:
     from .engine import restore as rs
     r = rs.restore_plan(f"{args.app}/{args.plan_id}", snapshot=args.snapshot)
-    print(("OK " if r.ok else "FAIL") + f" {r.plan_key} <- {r.snapshot}"
-          + ("" if r.ok else f": {r.error}"))
+    print(("OK " if r.ok else "FAIL") + _(" {key} <- {snapshot}").format(
+              key=r.plan_key, snapshot=r.snapshot)
+          + ("" if r.ok else _(": {error}").format(error=r.error)))
     return 0 if r.ok else 1
 
 
@@ -77,12 +81,13 @@ def cmd_self_backup(args) -> int:
     results = run_self_backup(protocol=args.protocol)
     for r in results:
         if r.ok:
-            print(f"OK {r.remote_name} -> {r.remote} ({r.files} 文件, "
-                  f"{format_size(r.bytes)}, 清理 {r.pruned} 个旧备份)")
+            print(_("OK {name} -> {remote} ({files} 文件, {size}, 清理 {pruned} 个旧备份)").format(
+                name=r.remote_name, remote=r.remote, files=r.files,
+                size=format_size(r.bytes), pruned=r.pruned))
             if r.local_path:
-                print(f"   本地副本: {r.local_path}")
+                print(_("   本地副本: {path}").format(path=r.local_path))
         else:
-            print(f"FAIL: {r.error}", file=sys.stderr)
+            print(_("FAIL: {error}").format(error=r.error), file=sys.stderr)
     return 0 if all(r.ok for r in results) else 1
 
 
@@ -102,9 +107,10 @@ def cmd_self_restore(args) -> int:
     from .protocols.runner import run_self_restore
     r = run_self_restore(args.protocol, args.file, overwrite=not args.no_overwrite)
     if r.ok:
-        print(f"OK 已恢复 {r.protocol}://{r.remote_name} ({r.files} 个文件)")
+        print(_("OK 已恢复 {proto}://{name} ({files} 个文件)").format(
+            proto=r.protocol, name=r.remote_name, files=r.files))
         return 0
-    print(f"FAIL: {r.error}", file=sys.stderr)
+    print(_("FAIL: {error}").format(error=r.error), file=sys.stderr)
     return 1
 
 
@@ -112,9 +118,9 @@ def cmd_self_delete(args) -> int:
     from .protocols.runner import delete_remote_file
     err = delete_remote_file(args.protocol, args.file)
     if err:
-        print(f"FAIL: {err}", file=sys.stderr)
+        print(_("FAIL: {error}").format(error=err), file=sys.stderr)
         return 1
-    print(f"OK 已删除 {args.file}")
+    print(_("OK 已删除 {file}").format(file=args.file))
     return 0
 
 
@@ -122,18 +128,18 @@ def cmd_export(args) -> int:
     if args.app:
         app = store.load_app(args.app)
         if not app:
-            _die(f"应用不存在: {args.app}")
+            _die(_("应用不存在: {app}").format(app=args.app))
         importexport.write_one(app, args.output)
-        print(f"exported {app.id} -> {args.output}")
+        print(_("已导出 {id} -> {path}").format(id=app.id, path=args.output))
     else:
         ids = importexport.export_all(args.output)
-        print(f"exported {len(ids)} apps -> {args.output}")
+        print(_("已导出 {n} 个应用到 {path}").format(n=len(ids), path=args.output))
     return 0
 
 
 def cmd_import(args) -> int:
     ids = importexport.import_(args.path)
-    print(f"imported: {', '.join(ids)}")
+    print(_("已导入: {ids}").format(ids=", ".join(ids)))
     return 0
 
 
@@ -141,13 +147,15 @@ def cmd_validate(args) -> int:
     from .engine import paths
     problems = 0
     apps = store.list_apps()
-    print(f"{len(apps)} apps, {sum(len(a.plans) for a in apps)} plans")
+    print(_("{apps} 个应用，{plans} 个计划").format(
+        apps=len(apps), plans=sum(len(a.plans) for a in apps)))
     for app in apps:
         for plan in app.plans:
             for s in plan.sources:
                 p = paths.expand(s)
                 if not os.path.exists(p):
-                    print(f"  [warn] {app.id}/{plan.id} 源不存在: {p}")
+                    print(_("  [warn] {key} 源不存在: {path}").format(
+                        key=f"{app.id}/{plan.id}", path=p))
                     problems += 1
             d = paths.expand(plan.destination)
             print(f"  [{'ok' if os.path.isdir(d) else 'warn'}] {app.id}/{plan.id} -> {d}")
@@ -160,12 +168,12 @@ def cmd_script(args) -> int:
     from .scripts import generator
     pair = store.load_plan(args.app, args.plan_id)
     if not pair:
-        _die(f"计划不存在: {args.app}/{args.plan_id}")
+        _die(_("计划不存在: {key}").format(key=f"{args.app}/{args.plan_id}"))
     app, plan = pair
     content = generator.generate(app, plan, args.flavor)
     if args.output:
         generator.write_script(args.output, content)
-        print(f"script -> {args.output}")
+        print(_("脚本已生成 -> {path}").format(path=args.output))
     else:
         print(content)
     return 0
@@ -175,27 +183,27 @@ def cmd_app(args) -> int:
     from .model import AppConfig
     if args.action == "list":
         for app in store.list_apps():
-            print(f"{app.id}\t{app.name}\t{len(app.plans)} plans")
+            print(f"{app.id}\t{app.name}\t" + _("{n} 个计划").format(n=len(app.plans)))
         return 0
     if args.action == "new":
         if not args.id or not args.name:
-            _die("app new 需要 --id 和 --name")
+            _die(_("app new 需要 --id 和 --name"))
         app = AppConfig(id=args.id, name=args.name, vendor=args.vendor or "",
                         version=args.version or "", note=args.note or "",
                         config_paths=args.config_path or [],
                         data_paths=args.data_path or [])
         store.save_app(app)
-        print(f"app created: {app.id}（计划请直接编辑 apps/{app.id}.json，GUI 下一阶段）")
+        print(_("app created: {id}（计划请直接编辑 apps/{id}.json，GUI 下一阶段）").format(id=app.id))
         return 0
     if args.action == "rm":
         store.delete_app(args.id)
-        print(f"app removed: {args.id}")
+        print(_("app removed: {id}").format(id=args.id))
         return 0
-    _die(f"未知 app 动作: {args.action}")
+    _die(_("未知 app 动作: {action}").format(action=args.action))
 
 
 def _add_app_parser(sub) -> None:
-    p = sub.add_parser("app", help="应用管理")
+    p = sub.add_parser("app", help=_("应用管理"))
     p.add_argument("action", choices=["list", "new", "rm"])
     p.add_argument("--id")
     p.add_argument("--name")
@@ -236,44 +244,44 @@ def main(argv: list[str] | None = None) -> int:
 
     p = argparse.ArgumentParser(prog="backupapp", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
-    p.add_argument("--data-dir", help="数据目录（默认便携：exe/当前目录下 data/）")
+    p.add_argument("--data-dir", help=_("数据目录（默认便携：exe/当前目录下 data/）"))
     sub = p.add_subparsers(dest="cmd")
 
-    sub.add_parser("gui", help="启动图形界面")
-    p2 = sub.add_parser("backup", help="执行备份")
+    sub.add_parser("gui", help=_("启动图形界面"))
+    p2 = sub.add_parser("backup", help=_("执行备份"))
     p2.add_argument("--all", action="store_true")
     p2.add_argument("--app")
     p2.add_argument("--plan")
-    p3 = sub.add_parser("restore", help="恢复备份")
+    p3 = sub.add_parser("restore", help=_("恢复备份"))
     p3.add_argument("--app", required=True)
     p3.add_argument("--plan-id", required=True)
     p3.add_argument("--snapshot")
-    p4 = sub.add_parser("task", help="全局计划任务开关")
+    p4 = sub.add_parser("task", help=_("全局计划任务开关"))
     p4.add_argument("action", choices=["on", "off", "status"])
-    sub.add_parser("validate", help="校验所有应用/计划配置")
-    p5 = sub.add_parser("export", help="导出应用配置")
+    sub.add_parser("validate", help=_("校验所有应用/计划配置"))
+    p5 = sub.add_parser("export", help=_("导出应用配置"))
     p5.add_argument("--app")
     p5.add_argument("--all", action="store_true")
     p5.add_argument("-o", "--output", required=True)
-    p6 = sub.add_parser("import", help="导入应用配置")
+    p6 = sub.add_parser("import", help=_("导入应用配置"))
     p6.add_argument("path")
-    p7 = sub.add_parser("script", help="生成备份/恢复一体脚本")
+    p7 = sub.add_parser("script", help=_("生成备份/恢复一体脚本"))
     p7.add_argument("--app", required=True)
     p7.add_argument("--plan-id", required=True)
     p7.add_argument("--flavor", choices=["ps1", "bat", "sh"], default="ps1")
     p7.add_argument("-o", "--output")
-    p_sb = sub.add_parser("self-backup", help="执行自身备份（默认全部启用的协议）")
-    p_sb.add_argument("--protocol", help="只备份指定协议: webdav|s3|ftp|sftp")
-    p_sl = sub.add_parser("self-list", help="列出远程自身备份文件")
+    p_sb = sub.add_parser("self-backup", help=_("执行自身备份（默认全部启用的协议）"))
+    p_sb.add_argument("--protocol", help=_("只备份指定协议: webdav|s3|ftp|sftp"))
+    p_sl = sub.add_parser("self-list", help=_("列出远程自身备份文件"))
     p_sl.add_argument("--protocol", required=True,
                       choices=["webdav", "s3", "ftp", "sftp"])
-    p_sr = sub.add_parser("self-restore", help="从远程恢复自身备份")
+    p_sr = sub.add_parser("self-restore", help=_("从远程恢复自身备份"))
     p_sr.add_argument("--protocol", required=True,
                       choices=["webdav", "s3", "ftp", "sftp"])
-    p_sr.add_argument("--file", required=True, help="远程备份文件名")
+    p_sr.add_argument("--file", required=True, help=_("远程备份文件名"))
     p_sr.add_argument("--no-overwrite", action="store_true",
-                      help="跳过本机已存在的应用（相同 id 保留现有）")
-    p_sd = sub.add_parser("self-delete", help="删除远程自身备份文件")
+                      help=_("跳过本机已存在的应用（相同 id 保留现有）"))
+    p_sd = sub.add_parser("self-delete", help=_("删除远程自身备份文件"))
     p_sd.add_argument("--protocol", required=True,
                       choices=["webdav", "s3", "ftp", "sftp"])
     p_sd.add_argument("--file", required=True)
