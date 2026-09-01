@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
                                QMessageBox, QVBoxLayout)
 
+from ..i18n import _
 from ..model import AppConfig
 from ..storage import store
 from .widgets import PathListEditor
@@ -11,12 +12,12 @@ from .widgets import PathListEditor
 class AppDialog(QDialog):
     def __init__(self, app: AppConfig | None = None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("编辑应用" if app else "新增应用")
+        self.setWindowTitle(_("编辑应用") if app else _("新增应用"))
         self.setMinimumWidth(520)
         self._app = app
 
         self._id = QLineEdit(app.id if app else "")
-        self._id.setPlaceholderText("唯一标识，如 vscode、com.example.app")
+        self._id.setPlaceholderText(_("唯一标识，如 vscode、com.example.app"))
         if app:
             self._id.setEnabled(False)  # id 是文件名主键，不允许改
         self._name = QLineEdit(app.name if app else "")
@@ -29,13 +30,13 @@ class AppDialog(QDialog):
         self._data_paths.set_paths(app.data_paths if app else [])
 
         form = QFormLayout()
-        form.addRow("ID", self._id)
-        form.addRow("名称", self._name)
-        form.addRow("厂商", self._vendor)
-        form.addRow("版本", self._version)
-        form.addRow("备注", self._note)
-        form.addRow("配置路径", self._config_paths)
-        form.addRow("数据路径", self._data_paths)
+        form.addRow(_("ID"), self._id)
+        form.addRow(_("名称"), self._name)
+        form.addRow(_("厂商"), self._vendor)
+        form.addRow(_("版本"), self._version)
+        form.addRow(_("备注"), self._note)
+        form.addRow(_("配置路径"), self._config_paths)
+        form.addRow(_("数据路径"), self._data_paths)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self._accept)
         btns.rejected.connect(self.reject)
@@ -47,10 +48,11 @@ class AppDialog(QDialog):
         app_id = self._id.text().strip()
         name = self._name.text().strip()
         if not app_id or not name:
-            QMessageBox.warning(self, "输入不完整", "ID 和名称不能为空")
+            QMessageBox.warning(self, _("输入不完整"), _("ID 和名称不能为空"))
             return
         if not self._app and store.load_app(app_id):
-            QMessageBox.warning(self, "ID 已存在", f"应用 {app_id} 已存在")
+            QMessageBox.warning(self, _("ID 已存在"),
+                                _("应用 {app_id} 已存在").format(app_id=app_id))
             return
         self.accept()
 
