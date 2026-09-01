@@ -51,7 +51,8 @@ class MainWindow(QMainWindow):
 
     # ---------- 构建 ----------
 
-    _APP_DESC = _("应用配置与数据备份工具（便携，跨平台）")
+    def _app_desc(self) -> str:
+        return _("应用配置与数据备份工具（便携，跨平台）")
     _GITHUB_URL = "https://github.com/muxinxy/BackupApp"
 
     def _about(self):
@@ -60,7 +61,7 @@ class MainWindow(QMainWindow):
         dlg.setWindowTitle(_("关于 BackupApp"))
         lay = QVBoxLayout(dlg)
         lay.addWidget(QLabel(f"<h3>BackupApp</h3>"))
-        lay.addWidget(QLabel(f"<b>{self._APP_DESC}</b>"))
+        lay.addWidget(QLabel(f"<b>{self._app_desc()}</b>"))
         lay.addWidget(QLabel(_("版本 {version}").format(version=__version__)))
         link = QLabel(f'<a href="{self._GITHUB_URL}">{self._GITHUB_URL}</a>')
         link.setOpenExternalLinks(True)
