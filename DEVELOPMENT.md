@@ -1,5 +1,7 @@
 # DEVELOPMENT.md — 开发交接文档
 
+> English version: [DEVELOPMENT.en.md](DEVELOPMENT.en.md)
+
 面向接手开发者的项目全貌：架构、关键设计决策、测试与发布流程。
 
 ## 1. 技术栈
