@@ -21,7 +21,9 @@ from .plan_dialog import PlanDialog
 from .settings_dialogs import SchedulerGroup, SelfBackupDialog, SelfBackupFilesDialog
 from .workers import BackupWorker, RestoreWorker
 
-_PLAN_COLS = ["启用", "名称", "源", "目的", "保留", "格式", "创建时间", "修改时间", "状态", "任务"]
+def _plan_cols() -> list[str]:
+    return [_("启用"), _("名称"), _("源"), _("目的"), _("保留"), _("格式"),
+            _("创建时间"), _("修改时间"), _("状态"), _("任务")]
 
 
 def _fmt_ts(iso: str | None) -> str:
@@ -32,7 +34,7 @@ def _fmt_ts(iso: str | None) -> str:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("BackupApp - 应用配置备份")
+        self.setWindowTitle(_("BackupApp - 应用配置备份"))
         self.resize(1280, 800)
         self.setMinimumSize(860, 560)
         self._workers: list = []
@@ -49,48 +51,48 @@ class MainWindow(QMainWindow):
 
     # ---------- 构建 ----------
 
-    _APP_DESC = "应用配置与数据备份工具（便携，跨平台）"
+    _APP_DESC = _("应用配置与数据备份工具（便携，跨平台）")
     _GITHUB_URL = "https://github.com/muxinxy/BackupApp"
 
     def _about(self):
         from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout
         dlg = QDialog(self)
-        dlg.setWindowTitle("关于 BackupApp")
+        dlg.setWindowTitle(_("关于 BackupApp"))
         lay = QVBoxLayout(dlg)
         lay.addWidget(QLabel(f"<h3>BackupApp</h3>"))
         lay.addWidget(QLabel(f"<b>{self._APP_DESC}</b>"))
-        lay.addWidget(QLabel(f"版本 {__version__}"))
+        lay.addWidget(QLabel(_("版本 {version}").format(version=__version__)))
         link = QLabel(f'<a href="{self._GITHUB_URL}">{self._GITHUB_URL}</a>')
         link.setOpenExternalLinks(True)
         lay.addWidget(link)
-        ok = QPushButton("确定")
+        ok = QPushButton(_("确定"))
         ok.clicked.connect(dlg.accept)
         lay.addWidget(ok)
         dlg.exec()
 
     def _build_toolbar(self):
-        tb = QToolBar("主工具栏")
+        tb = QToolBar(_("主工具栏"))
         tb.setMovable(False)
         self.addToolBar(tb)
-        self.act_backup_all = QAction("立即备份全部", self)
+        self.act_backup_all = QAction(_("立即备份全部"), self)
         self.act_backup_all.triggered.connect(self._backup_all)
-        self.act_import = QAction("导入", self)
+        self.act_import = QAction(_("导入"), self)
         self.act_import.triggered.connect(self._import_app)
-        self.act_export_all = QAction("导出全部", self)
+        self.act_export_all = QAction(_("导出全部"), self)
         self.act_export_all.triggered.connect(self._export_all)
-        self.act_self_backup = QAction("自身备份设置", self)
+        self.act_self_backup = QAction(_("自身备份设置"), self)
         self.act_self_backup.triggered.connect(self._self_backup_dialog)
-        self.act_self_backup_now = QAction("备份自身", self)
+        self.act_self_backup_now = QAction(_("备份自身"), self)
         self.act_self_backup_now.triggered.connect(self._self_backup_now)
-        self.act_self_backup_files = QAction("备份文件", self)
+        self.act_self_backup_files = QAction(_("备份文件"), self)
         self.act_self_backup_files.triggered.connect(self._self_backup_files_dialog)
-        self.act_script = QAction("批量生成脚本", self)
+        self.act_script = QAction(_("批量生成脚本"), self)
         self.act_script.triggered.connect(self._scripts_batch)
-        self.act_task_batch_reg = QAction("批量注册任务", self)
+        self.act_task_batch_reg = QAction(_("批量注册任务"), self)
         self.act_task_batch_reg.triggered.connect(self._task_batch_register)
-        self.act_task_batch_unreg = QAction("批量取消注册任务", self)
+        self.act_task_batch_unreg = QAction(_("批量取消注册任务"), self)
         self.act_task_batch_unreg.triggered.connect(self._task_batch_unregister)
-        self.act_about = QAction("关于", self)
+        self.act_about = QAction(_("关于"), self)
         self.act_about.triggered.connect(self._about)
 
         # 按钮按功能分组，每组用 QFrame 框起来
@@ -113,18 +115,18 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         # 主题切换（明亮/暗黑/跟随系统），选择持久化到 settings
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("明亮", "light")
-        self.theme_combo.addItem("暗黑", "dark")
-        self.theme_combo.addItem("跟随系统", "system")
+        self.theme_combo.addItem(_("明亮"), "light")
+        self.theme_combo.addItem(_("暗黑"), "dark")
+        self.theme_combo.addItem(_("跟随系统"), "system")
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(
             store.load_settings().general.theme)))
         self.theme_combo.currentIndexChanged.connect(self._theme_changed)
-        tb.addWidget(QLabel(" 主题:"))
+        tb.addWidget(QLabel(_(" 主题:")))
         tb.addWidget(self.theme_combo)
         # 语言切换（跟随系统/简体中文/English），持久化到 settings，重启后生效
         self.lang_combo = QComboBox()
-        self.lang_combo.addItem("跟随系统", "auto")
-        self.lang_combo.addItem("简体中文", "zh-CN")
+        self.lang_combo.addItem(_("跟随系统"), "auto")
+        self.lang_combo.addItem(_("简体中文"), "zh-CN")
         self.lang_combo.addItem("English", "en")
         self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(
             store.load_settings().general.language)))
@@ -161,7 +163,6 @@ class MainWindow(QMainWindow):
 
     def _lang_changed(self):
         from PySide6.QtWidgets import QMessageBox
-        from . import i18n  # noqa: F401  (仅用于占位，实际不重译)
         cfg = store.load_settings()
         cfg.general.language = self.lang_combo.currentData()
         store.save_settings(cfg)
@@ -178,11 +179,11 @@ class MainWindow(QMainWindow):
         self.app_list.currentItemChanged.connect(self._on_app_selected)
         lay.addWidget(self.app_list, 1)
         row = QHBoxLayout()
-        self.btn_app_new = QPushButton("新增")
-        self.btn_app_edit = QPushButton("编辑")
-        self.btn_app_del = QPushButton("删除")
-        self.btn_app_import = QPushButton("导入")
-        self.btn_app_export = QPushButton("导出")
+        self.btn_app_new = QPushButton(_("新增"))
+        self.btn_app_edit = QPushButton(_("编辑"))
+        self.btn_app_del = QPushButton(_("删除"))
+        self.btn_app_import = QPushButton(_("导入"))
+        self.btn_app_export = QPushButton(_("导出"))
         self.btn_app_new.clicked.connect(self._app_new)
         self.btn_app_edit.clicked.connect(self._app_edit)
         self.btn_app_del.clicked.connect(self._app_delete)
@@ -196,8 +197,8 @@ class MainWindow(QMainWindow):
         # 右：计划表格
         right = QWidget()
         lay = QVBoxLayout(right)
-        self.plan_table = QTableWidget(0, len(_PLAN_COLS))
-        self.plan_table.setHorizontalHeaderLabels(_PLAN_COLS)
+        self.plan_table = QTableWidget(0, len(_plan_cols()))
+        self.plan_table.setHorizontalHeaderLabels(_plan_cols())
         self.plan_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.plan_table.setSelectionMode(QTableWidget.SingleSelection)
         self.plan_table.setAlternatingRowColors(True)
@@ -223,13 +224,13 @@ class MainWindow(QMainWindow):
         self.plan_table.itemSelectionChanged.connect(self.refresh_plan_task_state)
         lay.addWidget(self.plan_table, 1)
         row = QHBoxLayout()
-        self.btn_backup = QPushButton("备份")
-        self.btn_restore = QPushButton("恢复")
-        self.btn_plan_new = QPushButton("新增计划")
-        self.btn_plan_edit = QPushButton("编辑")
-        self.btn_plan_script = QPushButton("生成脚本")
-        self.btn_plan_task = QPushButton("注册计划任务")
-        self.btn_plan_del = QPushButton("删除计划")
+        self.btn_backup = QPushButton(_("备份"))
+        self.btn_restore = QPushButton(_("恢复"))
+        self.btn_plan_new = QPushButton(_("新增计划"))
+        self.btn_plan_edit = QPushButton(_("编辑"))
+        self.btn_plan_script = QPushButton(_("生成脚本"))
+        self.btn_plan_task = QPushButton(_("注册计划任务"))
+        self.btn_plan_del = QPushButton(_("删除计划"))
         self.btn_backup.setObjectName("success")
         self.btn_restore.setObjectName("warning")
         self.btn_plan_del.setObjectName("danger")
@@ -273,7 +274,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
     def _build_statusbar(self):
-        self.status_label = QLabel("就绪")
+        self.status_label = QLabel(_("就绪"))
         self.statusBar().addWidget(self.status_label)
         # 备份/恢复进行中的忙碌动画（不定进度条）
         self.busy_bar = QProgressBar()
@@ -297,9 +298,9 @@ class MainWindow(QMainWindow):
             if app.note:
                 extra.append(app.note)
             if app.config_paths:
-                extra.append(f"配置 {len(app.config_paths)} 项")
+                extra.append(_("配置 {n} 项").format(n=len(app.config_paths)))
             if app.data_paths:
-                extra.append(f"数据 {len(app.data_paths)} 项")
+                extra.append(_("数据 {n} 项").format(n=len(app.data_paths)))
             if extra:
                 tip += "\n" + "\n".join(extra)
             item.setToolTip(tip)
@@ -346,17 +347,17 @@ class MainWindow(QMainWindow):
         plan = self._selected_plan()
         if not plan or not self._app_id:
             self.btn_plan_task.setEnabled(True)
-            self.btn_plan_task.setText("注册计划任务")
+            self.btn_plan_task.setText(_("注册计划任务"))
             return
         self.btn_plan_task.setText(
-            "取消注册任务" if plan.id in self._registered_plans else "注册计划任务")
+            _("取消注册任务") if plan.id in self._registered_plans else _("注册计划任务"))
 
     def _render_plans(self):
         self.plan_table.setRowCount(len(self._plans))
         for row, plan in enumerate(self._plans):
             cb = QCheckBox()
             cb.setChecked(plan.enabled)
-            cb.setToolTip("启用/停用该计划")
+            cb.setToolTip(_("启用/停用该计划"))
             cb.toggled.connect(lambda checked, r=row: self._toggle_plan(r, checked))
             wrap = QWidget()
             wl = QHBoxLayout(wrap)
@@ -367,32 +368,34 @@ class MainWindow(QMainWindow):
             src = plan.sources[0] if plan.sources else ""
             if len(plan.sources) > 1:
                 src += f" (+{len(plan.sources) - 1})"
-            fmt = plan.format if plan.compress else "目录"
+            fmt = plan.format if plan.compress else _("目录")
             # 保留列：N份/N天 + 月/年快照标记
-            ret = f"{plan.retention}{'份' if plan.retention_unit == 'count' else '天'}"
+            ret = _("{n}{unit}").format(
+                n=plan.retention,
+                unit=_("份") if plan.retention_unit == "count" else _("天"))
             ret_extra = []
             if plan.keep_monthly:
-                ret_extra.append("月")
+                ret_extra.append(_("月"))
             if plan.keep_yearly:
-                ret_extra.append("年")
+                ret_extra.append(_("年"))
             if ret_extra:
                 ret += "/" + "/".join(ret_extra)
             # 状态列：中文值 + 带年份时间；未运行置灰
             raw = plan.last_result or ""
             color_kind = None
             if not raw:
-                status = "未运行"
+                status = _("未运行")
             else:
                 base = raw.split(":", 1)[0].strip()
-                label = {"ok": "成功", "error": "失败",
-                         "restored": "已恢复"}.get(base, raw)
+                label = {"ok": _("成功"), "error": _("失败"),
+                         "restored": _("已恢复")}.get(base, raw)
                 ts = _fmt_ts(plan.last_run_at)
-                status = f"{label} @ {ts}" if ts else label
+                status = _("{label} @ {ts}").format(label=label, ts=ts) if ts else label
                 color_kind = {"ok": "ok", "error": "error",
                               "restored": "info"}.get(base, "warn")
             # 任务列：系统任务注册状态
             registered = plan.id in self._registered_plans
-            task_text = "已注册" if registered else "未注册"
+            task_text = _("已注册") if registered else _("未注册")
             try:
                 from .. import scheduler as sched
                 task_name = sched.plan_task_name(self._app_id or "", plan.id)
@@ -412,11 +415,11 @@ class MainWindow(QMainWindow):
                 tip = tips[col - 1]
                 if tip:
                     item.setToolTip(tip)
-                if col == len(_PLAN_COLS) - 1:  # 任务列着色
+                if col == len(_plan_cols()) - 1:  # 任务列着色
                     from . import theme
                     item.setForeground(QBrush(theme.status_color("ok")
                                               if registered else QColor("#9aa4b1")))
-                elif col == len(_PLAN_COLS) - 2:  # 状态列着色
+                elif col == len(_plan_cols()) - 2:  # 状态列着色
                     from . import theme
                     if color_kind:
                         item.setForeground(QBrush(theme.status_color(color_kind)))
@@ -443,7 +446,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.Accepted:
             app = dlg.app_config()
             store.save_app(app)
-            self._log(f"新增应用: {app.id}")
+            self._log(_("新增应用: {app_id}").format(app_id=app.id))
             self.refresh_apps(select_id=app.id)
 
     def _app_edit(self):
@@ -462,7 +465,7 @@ class MainWindow(QMainWindow):
             app.config_paths = edited.config_paths
             app.data_paths = edited.data_paths
             store.save_app(app)
-            self._log(f"应用已更新: {app.id}")
+            self._log(_("应用已更新: {app_id}").format(app_id=app.id))
             self.refresh_apps(select_id=app.id)
 
     def _plan_task_toggle(self):
@@ -470,44 +473,48 @@ class MainWindow(QMainWindow):
         from .. import scheduler as sched
         plan = self._selected_plan()
         if not plan or not self._app_id:
-            QMessageBox.information(self, "提示", "请先选择一个计划")
+            QMessageBox.information(self, _("提示"), _("请先选择一个计划"))
             return
         cfg = store.load_settings()
         if sched.plan_status(cfg, self._app_id, plan.id) == "registered":
             err = sched.plan_uninstall(self._app_id, plan.id)
             if err:
-                QMessageBox.warning(self, "计划任务", f"取消注册失败：{err}")
+                QMessageBox.warning(self, _("计划任务"),
+                                    _("取消注册失败：{err}").format(err=err))
             else:
-                self._log(f"已取消注册计划任务: {self._app_id}/{plan.id}")
+                self._log(_("已取消注册计划任务: {app_id}/{plan_id}").format(
+                    app_id=self._app_id, plan_id=plan.id))
         else:
             err = sched.plan_install(cfg, self._app_id, plan.id)
             if err:
-                QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
+                QMessageBox.warning(self, _("计划任务"),
+                                    _("注册失败：{err}").format(err=err))
             else:
-                self._log(f"已注册计划任务: {self._app_id}/{plan.id}")
+                self._log(_("已注册计划任务: {app_id}/{plan_id}").format(
+                    app_id=self._app_id, plan_id=plan.id))
         self.refresh_plans()  # 刷新表格任务列与按钮状态
 
     def _task_batch_register(self):
         """批量注册所有已启用计划的系统任务（后台执行，不冻结界面）。"""
         if not any(p.enabled for a in store.list_apps() for p in a.plans):
-            QMessageBox.information(self, "批量注册任务", "没有已启用的计划")
+            QMessageBox.information(self, _("批量注册任务"), _("没有已启用的计划"))
             return
-        self._run_batch_worker("批量注册任务", True)
+        self._run_batch_worker(_("批量注册任务"), True)
 
     def _task_batch_unregister(self):
         """批量取消注册所有已启用计划的系统任务（后台执行）。"""
         if not any(p.enabled for a in store.list_apps() for p in a.plans):
-            QMessageBox.information(self, "批量取消注册任务", "没有已启用的计划")
+            QMessageBox.information(self, _("批量取消注册任务"), _("没有已启用的计划"))
             return
-        self._run_batch_worker("批量取消注册任务", False)
+        self._run_batch_worker(_("批量取消注册任务"), False)
 
     def _run_batch_worker(self, label: str, register: bool):
         if self._workers:
             return
         from .workers import BatchTaskWorker
-        self._log(f"—— {label} 开始 ——")
+        self._log(_("—— {label} 开始 ——").format(label=label))
         self._set_busy(True)
-        self.status_label.setText(f"{label} 进行中…")
+        self.status_label.setText(_("{label} 进行中…").format(label=label))
         self.busy_bar.show()
         w = BatchTaskWorker(register, self)
         w.result.connect(self._on_worker_result)
@@ -518,12 +525,15 @@ class MainWindow(QMainWindow):
 
     def _on_batch_done(self, ok: int, total: int, label: str):
         fail = total - ok
-        self._log(f"—— {label} 完成：成功 {ok} 个，失败 {fail} 个 ——")
+        self._log(_("—— {label} 完成：成功 {ok} 个，失败 {fail} 个 ——").format(
+            label=label, ok=ok, fail=fail))
         if fail:
-            QMessageBox.warning(self, label, f"{fail} 个计划操作失败，详见日志")
+            QMessageBox.warning(self, label,
+                                _("{fail} 个计划操作失败，详见日志").format(fail=fail))
         self.refresh_apps()  # 刷新任务列与注册状态
         self.sched_group.refresh_status()
-        self.status_label.setText("完成" if not fail else f"完成，{fail} 个失败")
+        self.status_label.setText(
+            _("完成") if not fail else _("完成，{fail} 个失败").format(fail=fail))
 
     def _app_delete(self):
         if not self._app_id:
@@ -532,41 +542,43 @@ class MainWindow(QMainWindow):
         app = store.load_app(app_id)
         if not app:
             return
-        ret = QMessageBox.question(self, "删除应用",
-                                   f"确定删除应用 {app_id}？\n（不会删除已生成的备份）")
+        ret = QMessageBox.question(self, _("删除应用"),
+                                   _("确定删除应用 {app_id}？\n（不会删除已生成的备份）")
+                                   .format(app_id=app_id))
         if ret == QMessageBox.Yes:
             # 顺带取消该应用全部计划的系统任务
             from .. import scheduler as sched
             for p in app.plans:
                 err = sched.plan_uninstall(app_id, p.id)
                 if err:
-                    self._log(f"取消计划任务失败 {app_id}/{p.id}: {err}")
+                    self._log(_("取消计划任务失败 {app_id}/{plan_id}: {err}").format(
+                        app_id=app_id, plan_id=p.id, err=err))
             store.delete_app(app_id)
-            self._log(f"删除应用: {app_id}")
+            self._log(_("删除应用: {app_id}").format(app_id=app_id))
             self.refresh_apps()
 
     def _import_app(self):
-        path, _ = QFileDialog.getOpenFileName(self, "导入应用配置", "",
-                                              "配置 (*.json *.zip)")
+        path, _ = QFileDialog.getOpenFileName(self, _("导入应用配置"), "",
+                                              _("配置 (*.json *.zip)"))
         if not path:
             return
         from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit
         dlg = QDialog(self)
-        dlg.setWindowTitle("导入选项")
+        dlg.setWindowTitle(_("导入选项"))
         lay = QFormLayout(dlg)
         is_zip = path.lower().endswith(".zip")
-        cb_overwrite = QCheckBox("覆盖同 ID 的应用")
+        cb_overwrite = QCheckBox(_("覆盖同 ID 的应用"))
         cb_overwrite.setChecked(True)
         lay.addRow(cb_overwrite)
         pw = None
         if is_zip:
-            cb_settings = QCheckBox("恢复全局设置（自身备份配置/主题等）")
+            cb_settings = QCheckBox(_("恢复全局设置（自身备份配置/主题等）"))
             cb_settings.setChecked(True)
             lay.addRow(cb_settings)
             pw = QLineEdit()
             pw.setEchoMode(QLineEdit.Password)
-            pw.setPlaceholderText("加密导出则需输入密码")
-            lay.addRow("密码", pw)
+            pw.setPlaceholderText(_("加密导出则需输入密码"))
+            lay.addRow(_("密码"), pw)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
@@ -578,43 +590,44 @@ class MainWindow(QMainWindow):
                 path, overwrite=cb_overwrite.isChecked(),
                 password=pw.text() if pw else "",
                 import_settings=cb_settings.isChecked() if is_zip else True)
-            self._log(f"导入成功: {', '.join(ids) if ids else '（无新应用）'}")
+            self._log(_("导入成功: {detail}").format(
+                detail=", ".join(ids) if ids else _("（无新应用）")))
             self.refresh_apps(select_id=ids[0] if ids else None)
         except Exception as e:
-            QMessageBox.critical(self, "导入失败", str(e))
+            QMessageBox.critical(self, _("导入失败"), str(e))
 
     def _export_selected(self):
         if not self._app_id:
             return
         stamp = datetime.now().strftime("%Y%m%d_%H%M")
-        path, _ = QFileDialog.getSaveFileName(self, "导出应用配置",
+        path, _ = QFileDialog.getSaveFileName(self, _("导出应用配置"),
                                               f"{self._app_id}_{stamp}.json",
-                                              "JSON (*.json)")
+                                              _("JSON (*.json)"))
         if not path:
             return
         app = store.load_app(self._app_id)
         if app:
             importexport.write_one(app, path)
-            self._log(f"导出 {app.id} -> {path}")
+            self._log(_("导出 {app_id} -> {path}").format(app_id=app.id, path=path))
 
     def _export_all(self):
         stamp = datetime.now().strftime("%Y%m%d_%H%M")
-        path, _ = QFileDialog.getSaveFileName(self, "导出全部应用配置",
+        path, _ = QFileDialog.getSaveFileName(self, _("导出全部应用配置"),
                                               f"backupapp_export_{stamp}.zip",
-                                              "ZIP (*.zip)")
+                                              _("ZIP (*.zip)"))
         if not path:
             return
         from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit
         dlg = QDialog(self)
-        dlg.setWindowTitle("导出选项")
+        dlg.setWindowTitle(_("导出选项"))
         lay = QFormLayout(dlg)
-        cb_encrypt = QCheckBox("加密压缩包（AES）")
+        cb_encrypt = QCheckBox(_("加密压缩包（AES）"))
         lay.addRow(cb_encrypt)
         pw = QLineEdit()
         pw.setEchoMode(QLineEdit.Password)
         pw.setEnabled(False)
-        pw.setPlaceholderText("导出密码")
-        lay.addRow("密码", pw)
+        pw.setPlaceholderText(_("导出密码"))
+        lay.addRow(_("密码"), pw)
         cb_encrypt.toggled.connect(pw.setEnabled)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept)
@@ -625,10 +638,10 @@ class MainWindow(QMainWindow):
         password = pw.text() if cb_encrypt.isChecked() else ""
         try:
             ids = importexport.export_all(path, password=password)
-            self._log(f"导出 {len(ids)} 个应用 -> {path}"
-                      + ("（已加密）" if password else ""))
+            self._log(_("导出 {n} 个应用 -> {path}").format(n=len(ids), path=path)
+                      + (_("（已加密）") if password else ""))
         except Exception as e:
-            QMessageBox.critical(self, "导出失败", str(e))
+            QMessageBox.critical(self, _("导出失败"), str(e))
 
     # ---------- 计划操作 ----------
 
@@ -640,7 +653,7 @@ class MainWindow(QMainWindow):
 
     def _plan_new(self):
         if not self._app_id:
-            QMessageBox.information(self, "提示", "请先选择一个应用")
+            QMessageBox.information(self, _("提示"), _("请先选择一个应用"))
             return
         app = store.load_app(self._app_id)
         if not app:
@@ -649,11 +662,13 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.Accepted:
             plan = dlg.plan()
             if app.get_plan(plan.id):
-                QMessageBox.warning(self, "ID 冲突", f"计划 {plan.id} 已存在")
+                QMessageBox.warning(self, _("ID 冲突"),
+                                    _("计划 {plan_id} 已存在").format(plan_id=plan.id))
                 return
             app.plans.append(plan)
             store.save_app(app)
-            self._log(f"新增计划: {app.id}/{plan.id}")
+            self._log(_("新增计划: {app_id}/{plan_id}").format(
+                app_id=app.id, plan_id=plan.id))
             self.refresh_plans()
 
     def _plan_edit(self, *_):
@@ -675,17 +690,20 @@ class MainWindow(QMainWindow):
             # 对话框直接改写 self._plans 中的对象；app 是新加载的，须原位替换后保存
             app.plans = [plan if p.id == old_id else p for p in app.plans]
             store.save_app(app)
-            self._log(f"计划已更新: {app.id}/{plan.id}")
+            self._log(_("计划已更新: {app_id}/{plan_id}").format(
+                app_id=app.id, plan_id=plan.id))
             if was_registered:
                 if plan.id != old_id:
                     # ID 变更：旧任务指向已不存在的计划，自动取消注册
                     err = sched.plan_uninstall(self._app_id, old_id)
                     if err:
-                        self._log(f"取消旧计划任务失败 {self._app_id}/{old_id}: {err}")
+                        self._log(_("取消旧计划任务失败 {app_id}/{plan_id}: {err}").format(
+                            app_id=self._app_id, plan_id=old_id, err=err))
                 # 已注册任务按新排期/ID 重新注册
                 err = sched.plan_install(store.load_settings(), self._app_id, plan.id)
                 if err:
-                    self._log(f"更新计划任务失败 {self._app_id}/{plan.id}: {err}")
+                    self._log(_("更新计划任务失败 {app_id}/{plan_id}: {err}").format(
+                        app_id=self._app_id, plan_id=plan.id, err=err))
             self.refresh_plans()
 
     def _plan_delete(self):
@@ -694,25 +712,28 @@ class MainWindow(QMainWindow):
         plan = self._selected_plan()
         if not plan:
             return
-        ret = QMessageBox.question(self, "删除计划",
-                                   f"确定删除计划 {self._app_id}/{plan.id}？")
+        ret = QMessageBox.question(self, _("删除计划"),
+                                   _("确定删除计划 {app_id}/{plan_id}？").format(
+                                       app_id=self._app_id, plan_id=plan.id))
         if ret == QMessageBox.Yes:
             # 先取消注册该计划的系统任务，避免残留任务反复报"计划不存在"
             from .. import scheduler as sched
             err = sched.plan_uninstall(self._app_id, plan.id)
             if err:
-                self._log(f"取消计划任务失败 {self._app_id}/{plan.id}: {err}")
+                self._log(_("取消计划任务失败 {app_id}/{plan_id}: {err}").format(
+                    app_id=self._app_id, plan_id=plan.id, err=err))
             app = store.load_app(self._app_id)
             if app:
                 app.plans = [p for p in app.plans if p.id != plan.id]
                 store.save_app(app)
-                self._log(f"删除计划: {app.id}/{plan.id}")
+                self._log(_("删除计划: {app_id}/{plan_id}").format(
+                    app_id=app.id, plan_id=plan.id))
                 self.refresh_plans()
 
     def _plan_backup(self):
         plan = self._selected_plan()
         if not plan or not self._app_id:
-            QMessageBox.information(self, "提示", "请先选择一个计划")
+            QMessageBox.information(self, _("提示"), _("请先选择一个计划"))
             return
         key = f"{self._app_id}/{plan.id}"
 
@@ -720,38 +741,39 @@ class MainWindow(QMainWindow):
             from ..engine.backup import run_plan
             return run_plan(key, progress=cb)
 
-        self._run_worker(f"备份 {key}", _do, BackupWorker)
+        self._run_worker(_("备份 {key}").format(key=key), _do, BackupWorker)
 
     def _backup_all(self):
         def _do(cb):
             from ..engine.backup import run_all
             return run_all(progress=cb)
 
-        self._run_worker("备份全部", _do, BackupWorker)
+        self._run_worker(_("备份全部"), _do, BackupWorker)
 
     def _plan_restore(self):
         plan = self._selected_plan()
         if not plan or not self._app_id:
-            QMessageBox.information(self, "提示", "请先选择一个计划")
+            QMessageBox.information(self, _("提示"), _("请先选择一个计划"))
             return
         from ..engine import paths as epaths, retention
         dest = epaths.expand(plan.destination)
         entries = retention.list_entries(dest, self._app_id)
         if not entries:
             QMessageBox.information(
-                self, "恢复", f"{dest} 下没有 {self._app_id} 的备份")
+                self, _("恢复"), _("{dest} 下没有 {app_id} 的备份").format(
+                    dest=dest, app_id=self._app_id))
             return
         snaps = [retention.snapshot_of(e) for e in entries]
         # 自定义对话框：备份列表下拉可一次显示多项
         dlg = QDialog(self)
-        dlg.setWindowTitle("选择备份")
+        dlg.setWindowTitle(_("选择备份"))
         combo = QComboBox()
         combo.addItems(snaps)
         combo.setMaxVisibleItems(20)
         combo.setMinimumWidth(340)
         combo.setCurrentIndex(0)
         lay = QVBoxLayout(dlg)
-        lay.addWidget(QLabel("选择要恢复的备份:"))
+        lay.addWidget(QLabel(_("选择要恢复的备份:")))
         lay.addWidget(combo)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept)
@@ -760,12 +782,12 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.Accepted:
             return
         snap = combo.currentText()
-        src = plan.sources[0] if plan.sources else "源路径"
+        src = plan.sources[0] if plan.sources else _("源路径")
         mb = QMessageBox(self)
-        mb.setWindowTitle("恢复")
+        mb.setWindowTitle(_("恢复"))
         mb.setIcon(QMessageBox.Question)
-        mb.setText(f"将从备份 {snap} 恢复 {src}。")
-        cb = QCheckBox("恢复前先备份当前配置/数据")
+        mb.setText(_("将从备份 {snap} 恢复 {src}。").format(snap=snap, src=src))
+        cb = QCheckBox(_("恢复前先备份当前配置/数据"))
         cb.setChecked(True)
         mb.setCheckBox(cb)
         mb.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
@@ -781,14 +803,14 @@ class MainWindow(QMainWindow):
                 bk.run_plan(key)  # 先备份当前状态
             return rs.restore_plan(key, snap)
 
-        self._run_worker(f"恢复 {key}", _do, RestoreWorker)
+        self._run_worker(_("恢复 {key}").format(key=key), _do, RestoreWorker)
 
     def _run_worker(self, label: str, fn, worker_cls):
         if self._workers:
             return
-        self._log(f"—— {label} 开始 ——")
+        self._log(_("—— {label} 开始 ——").format(label=label))
         self._set_busy(True)
-        self.status_label.setText(f"{label} 进行中…")
+        self.status_label.setText(_("{label} 进行中…").format(label=label))
         self.busy_bar.show()
         w = worker_cls(fn, self)
         w.result.connect(self._on_worker_result)
@@ -803,10 +825,12 @@ class MainWindow(QMainWindow):
         self._log(f"[{'OK ' if ok else 'FAIL'}] {plan_key}: {msg}")
 
     def _on_worker_done(self, ok: int, total: int, label: str):
-        self._log(f"—— {label} 完成：{ok}/{total} 成功 ——")
+        self._log(_("—— {label} 完成：{ok}/{total} 成功 ——").format(
+            label=label, ok=ok, total=total))
         self.refresh_plans()
         self.sched_group.refresh_status()
-        self.status_label.setText("完成" if ok == total else f"完成 {ok}/{total}")
+        self.status_label.setText(
+            _("完成") if ok == total else _("完成 {ok}/{total}").format(ok=ok, total=total))
 
     def _on_worker_finished(self):
         if self._workers:
@@ -842,47 +866,47 @@ class MainWindow(QMainWindow):
         """自身备份恢复/删除后刷新应用列表与计划表格（无需重启）。"""
         self.refresh_apps()
         self.refresh_plans()
-        self._log("自身备份数据已变更，界面已刷新")
+        self._log(_("自身备份数据已变更，界面已刷新"))
 
     def _self_backup_now(self):
         def _do(cb):
             from ..protocols.runner import run_self_backup
             return run_self_backup()
 
-        self._run_worker("自身备份", _do, BackupWorker)
+        self._run_worker(_("自身备份"), _do, BackupWorker)
 
     def _script_dialog(self):
         """生成单个计划（选中）的备份/恢复一体脚本。"""
         plan = self._selected_plan()
         if not plan or not self._app_id:
-            QMessageBox.information(self, "提示", "请先选择一个计划")
+            QMessageBox.information(self, _("提示"), _("请先选择一个计划"))
             return
         app = store.load_app(self._app_id)
         if not app:
             return
         from ..scripts import generator
         dlg = QDialog(self)
-        dlg.setWindowTitle("生成脚本")
+        dlg.setWindowTitle(_("生成脚本"))
         flavor = QComboBox()
-        flavor.addItem("Windows PowerShell (ps1)", "ps1")
-        flavor.addItem("Windows 批处理 (bat)", "bat")
-        flavor.addItem("Linux shell (sh)", "sh")
+        flavor.addItem(_("Windows PowerShell (ps1)"), "ps1")
+        flavor.addItem(_("Windows 批处理 (bat)"), "bat")
+        flavor.addItem(_("Linux shell (sh)"), "sh")
         form = QFormLayout(dlg)
-        form.addRow("平台", flavor)
-        form.addRow("", QLabel("脚本含备份与恢复功能，支持交互与 -y 静默运行"))
+        form.addRow(_("平台"), flavor)
+        form.addRow("", QLabel(_("脚本含备份与恢复功能，支持交互与 -y 静默运行")))
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         form.addRow(btns)
 
         def do_save():
             path, _ = QFileDialog.getSaveFileName(
-                dlg, "保存脚本",
+                dlg, _("保存脚本"),
                 f"{app.id}_{plan.id}.{flavor.currentData()}",
-                "脚本 (*.*)")
+                _("脚本 (*.*)"))
             if not path:
                 return
             content = generator.generate(app, plan, flavor.currentData())
             generator.write_script(path, content)
-            self._log(f"脚本 -> {path}")
+            self._log(_("脚本 -> {path}").format(path=path))
             dlg.accept()
 
         btns.accepted.connect(do_save)
@@ -893,24 +917,24 @@ class MainWindow(QMainWindow):
         """批量生成所有启用计划的备份/恢复一体脚本。"""
         plans = [(a, p) for a in store.list_apps() for p in a.plans if p.enabled]
         if not plans:
-            QMessageBox.information(self, "提示", "没有启用的计划")
+            QMessageBox.information(self, _("提示"), _("没有启用的计划"))
             return
         from ..scripts import generator
         dlg = QDialog(self)
-        dlg.setWindowTitle("批量生成脚本")
+        dlg.setWindowTitle(_("批量生成脚本"))
         flavor = QComboBox()
-        flavor.addItem("Windows PowerShell (ps1)", "ps1")
-        flavor.addItem("Windows 批处理 (bat)", "bat")
-        flavor.addItem("Linux shell (sh)", "sh")
+        flavor.addItem(_("Windows PowerShell (ps1)"), "ps1")
+        flavor.addItem(_("Windows 批处理 (bat)"), "bat")
+        flavor.addItem(_("Linux shell (sh)"), "sh")
         form = QFormLayout(dlg)
-        form.addRow("", QLabel(f"将为 {len(plans)} 个启用计划各生成一个脚本"))
-        form.addRow("平台", flavor)
-        form.addRow("", QLabel("脚本含备份与恢复功能，支持交互与 -y 静默运行"))
+        form.addRow("", QLabel(_("将为 {n} 个启用计划各生成一个脚本").format(n=len(plans))))
+        form.addRow(_("平台"), flavor)
+        form.addRow("", QLabel(_("脚本含备份与恢复功能，支持交互与 -y 静默运行")))
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         form.addRow(btns)
 
         def do_save():
-            outdir = QFileDialog.getExistingDirectory(dlg, "选择保存目录")
+            outdir = QFileDialog.getExistingDirectory(dlg, _("选择保存目录"))
             if not outdir:
                 return
             n = 0
@@ -918,7 +942,7 @@ class MainWindow(QMainWindow):
                 path = os.path.join(outdir, f"{a.id}_{p.id}.{flavor.currentData()}")
                 generator.write_script(path, generator.generate(a, p, flavor.currentData()))
                 n += 1
-            self._log(f"生成 {n} 个脚本 -> {outdir}")
+            self._log(_("生成 {n} 个脚本 -> {outdir}").format(n=n, outdir=outdir))
             dlg.accept()
 
         btns.accepted.connect(do_save)
