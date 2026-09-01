@@ -1,5 +1,7 @@
 # BackupApp
 
+> English version: [README.en.md](README.en.md)
+
 应用配置与数据备份工具（便携，跨平台）。提供 PySide6 桌面 GUI 与 CLI，备份应用配置与数据到本地目录或远程存储，支持压缩加密、计划任务与保留策略。
 
 ## 功能
