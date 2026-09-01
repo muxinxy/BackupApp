@@ -4,6 +4,8 @@ import fnmatch
 import os
 import shutil
 
+from ..i18n import _
+
 
 def _excluded(rel: str, excludes: list[str]) -> bool:
     for pat in excludes:
@@ -87,7 +89,7 @@ def create_archive(src_dirs: list[str], archive_path: str, fmt: str,
                 if progress:
                     progress(arc, i, total)
     else:
-        raise ValueError(f"不支持的压缩格式: {fmt}")
+        raise ValueError(_("不支持的压缩格式: {fmt}").format(fmt=fmt))
     return _count(items)
 
 
@@ -111,7 +113,8 @@ def extract_archive(archive_path: str, dest_dir: str, password: str) -> None:
         with tarfile.open(archive_path, "r:gz") as t:
             t.extractall(dest_dir)
     else:
-        raise ValueError(f"不支持的压缩格式: {archive_path}")
+        raise ValueError(
+            _("不支持的压缩格式: {archive_path}").format(archive_path=archive_path))
 
 
 def copy_tree(src_dirs: list[str], entry: str, excludes: list[str],

@@ -3,6 +3,8 @@
 import os
 import sys
 
+from ..i18n import _
+
 
 class DataLock:
     """以 data/.lock 为锁文件，非阻塞获取，获取失败抛异常。"""
@@ -23,7 +25,9 @@ class DataLock:
         except OSError as e:
             self._fh.close()
             self._fh = None
-            raise RuntimeError(f"另一个备份进程正在运行（锁文件 {self._path}）") from e
+            raise RuntimeError(
+                _("另一个备份进程正在运行（锁文件 {path}）").format(path=self._path)
+            ) from e
         return self
 
     def __exit__(self, *exc) -> None:

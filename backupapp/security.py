@@ -14,6 +14,7 @@ import ctypes.wintypes as wt
 import dataclasses
 import sys
 
+from .i18n import _
 from .model import SelfBackup
 
 SERVICE = "backupapp"
@@ -27,14 +28,14 @@ class _Blob(ctypes.Structure):
 
 def _dpapi(data: bytes, encrypt: bool) -> bytes:
     if sys.platform != "win32":
-        raise RuntimeError("DPAPI 仅支持 Windows")
+        raise RuntimeError(_("DPAPI 仅支持 Windows"))
     crypt = ctypes.windll.crypt32
     fn = crypt.CryptProtectData if encrypt else crypt.CryptUnprotectData
     buf = ctypes.create_string_buffer(data, len(data))
     in_blob = _Blob(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_ubyte)))
     out_blob = _Blob()
     if not fn(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)):
-        raise RuntimeError("DPAPI 调用失败")
+        raise RuntimeError(_("DPAPI 调用失败"))
     try:
         return ctypes.string_at(out_blob.pbData, out_blob.cbData)
     finally:
@@ -49,7 +50,7 @@ def encrypt_secret(secret: str, kind: str) -> str:
         return base64.b64encode(_dpapi(secret.encode("utf-8"), True)).decode()
     if kind == "keyring":
         return secret
-    raise ValueError(f"未知凭据存储: {kind}")
+    raise ValueError(_("未知凭据存储: {kind}").format(kind=kind))
 
 
 def decrypt_secret(stored: str, kind: str = "dpapi") -> str:
@@ -60,7 +61,7 @@ def decrypt_secret(stored: str, kind: str = "dpapi") -> str:
         return _dpapi(base64.b64decode(stored), False).decode("utf-8")
     if kind == "keyring":
         return stored
-    raise ValueError(f"未知凭据存储: {kind}")
+    raise ValueError(_("未知凭据存储: {kind}").format(kind=kind))
 
 
 def keyring_set(username: str, value: str) -> None:

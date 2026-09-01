@@ -9,6 +9,7 @@ import re
 
 from platformdirs import user_data_dir
 
+from ..i18n import _
 from ..model import AppConfig, BackupPlan, SCHEMA_VERSION, Settings
 
 VALID_ID = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -52,7 +53,7 @@ def settings_path() -> str:
 
 def app_path(app_id: str) -> str:
     if not VALID_ID.match(app_id):
-        raise ValueError(f"非法应用 id: {app_id!r}")
+        raise ValueError(_("非法应用 id: {app_id}").format(app_id=app_id))
     return os.path.join(apps_dir(), f"{app_id}.json")
 
 

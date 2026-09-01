@@ -7,6 +7,7 @@
 import subprocess
 
 from .. import logging
+from ..i18n import _
 
 
 def run_hook(cmd: str, timeout: int, plan_key: str, when: str) -> None:
@@ -20,10 +21,14 @@ def run_hook(cmd: str, timeout: int, plan_key: str, when: str) -> None:
         if r.returncode != 0:
             tail = (r.stdout or "").strip().splitlines()[-3:]
             tail += (r.stderr or "").strip().splitlines()[-3:]
-            detail = "\n".join(line for line in tail if line) or "无输出"
-            raise RuntimeError(f"{when}钩子退出码 {r.returncode}:\n{detail}")
+            detail = "\n".join(line for line in tail if line) or _("无输出")
+            raise RuntimeError(
+                _("{when}钩子退出码 {code}:\n{detail}").format(
+                    when=when, code=r.returncode, detail=detail))
         if r.stdout and r.stdout.strip():
             logging.get_logger().info("[%s] %s钩子输出: %s",
                                       plan_key, when, r.stdout.strip()[-200:])
     except subprocess.TimeoutExpired:
-        raise RuntimeError(f"{when}钩子执行超时（>{timeout}s）: {cmd}")
+        raise RuntimeError(
+            _("{when}钩子执行超时（>{timeout}s）: {cmd}").format(
+                when=when, timeout=timeout, cmd=cmd))

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .. import logging
+from ..i18n import _
 from ..storage import store
 from ..util import format_size
 from . import compress, hooks, link as linkmod, paths, retention
@@ -40,10 +41,11 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
     try:
         pair = store.load_plan(*plan_key.split("/", 1))
         if not pair:
-            raise ValueError(f"计划不存在: {plan_key}")
+            raise ValueError(_("计划不存在: {plan_key}").format(plan_key=plan_key))
         app, plan = pair
         if not plan.sources:
-            raise ValueError(f"计划 {plan_key} 没有配置源路径")
+            raise ValueError(
+                _("计划 {plan_key} 没有配置源路径").format(plan_key=plan_key))
         dest = paths.expand(plan.destination)
         os.makedirs(dest, exist_ok=True)
         srcs = paths.expand_many(plan.sources)
@@ -54,7 +56,7 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
             srcs = [live_dir] + srcs[1:]
 
         # 前置钩子：失败（非零/超时）则中止备份
-        hooks.run_hook(plan.pre_cmd, plan.cmd_timeout, plan_key, "备份前")
+        hooks.run_hook(plan.pre_cmd, plan.cmd_timeout, plan_key, _("备份前"))
 
         snapshot = datetime.now().strftime("%Y%m%d_%H%M%S")
         entry = retention.entry_path(dest, app.id, snapshot, plan.compress, plan.format)
@@ -70,7 +72,7 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
 
         # 后置钩子：失败仅记录日志，不影响备份结果
         try:
-            hooks.run_hook(plan.post_cmd, plan.cmd_timeout, plan_key, "备份后")
+            hooks.run_hook(plan.post_cmd, plan.cmd_timeout, plan_key, _("备份后"))
         except RuntimeError as e:
             logging.get_logger().warning("[%s] 备份后钩子失败: %s", plan_key, e)
 
@@ -111,6 +113,6 @@ def run_all(progress=None) -> list[BackupResult]:
 def run_app(app_id: str, progress=None) -> list[BackupResult]:
     app = store.load_app(app_id)
     if not app:
-        raise ValueError(f"应用不存在: {app_id}")
+        raise ValueError(_("应用不存在: {app_id}").format(app_id=app_id))
     return [run_plan(f"{app.id}/{p.id}", progress=progress)
             for p in app.plans if p.enabled]

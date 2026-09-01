@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 
+from .i18n import _
+
 TASK_NAME = "BackupAppGlobalBackup"
 
 # 已注册任务缓存（TTL 5 秒）：{任务名: 要运行命令}，状态查询与已注册列表共用，
@@ -71,7 +73,7 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
         return subprocess.run(cmd, capture_output=True, text=True,
                               timeout=20, **kwargs)
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(cmd, 1, "", "命令超时")
+        return subprocess.CompletedProcess(cmd, 1, "", _("命令超时"))
 
 
 # ---- Windows ----
@@ -102,15 +104,15 @@ def _win_install(sc: tuple, task_name: str, command: str) -> str:
     r = _run(cmd)
     if r.returncode == 0:
         return ""
-    err = (r.stderr or r.stdout or "未知错误").strip()
+    err = (r.stderr or r.stdout or _("未知错误")).strip()
     if sc[0] == "atLogon":
-        err += "（登录时任务需要以管理员身份运行）"
+        err += _("（登录时任务需要以管理员身份运行）")
     return err
 
 
 def _win_uninstall(task_name: str) -> str:
     r = _run(["schtasks", "/delete", "/tn", task_name, "/f"])
-    return "" if r.returncode == 0 else (r.stderr or "删除失败").strip()
+    return "" if r.returncode == 0 else (r.stderr or _("删除失败")).strip()
 
 
 def _tasks_table() -> dict[str, str]:
@@ -194,7 +196,7 @@ def _mac_install(sc: tuple, task_name: str, command: str) -> str:
     with open(p, "w", encoding="utf-8") as f:
         f.write(_mac_plist(sc, task_name, command))
     r = _run(["launchctl", "load", "-w", p])
-    return "" if r.returncode == 0 else "launchctl load 失败"
+    return "" if r.returncode == 0 else _("launchctl load 失败")
 
 
 def _mac_uninstall(task_name: str) -> str:
@@ -239,12 +241,12 @@ def _write_crontab(lines: list[str]) -> bool:
 def _linux_install(sc: tuple, task_name: str, command: str) -> str:
     lines = [ln for ln in _crontab_lines() if task_name not in ln]
     lines.append(_cron_line(sc, task_name, command))
-    return "" if _write_crontab(lines) else "crontab 写入失败"
+    return "" if _write_crontab(lines) else _("crontab 写入失败")
 
 
 def _linux_uninstall(task_name: str) -> str:
     lines = [ln for ln in _crontab_lines() if task_name not in ln]
-    return "" if _write_crontab(lines) else "crontab 写入失败"
+    return "" if _write_crontab(lines) else _("crontab 写入失败")
 
 
 # ---- 统一入口 ----

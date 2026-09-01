@@ -9,6 +9,7 @@ import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from ..i18n import _
 from ..model import SelfBackup
 
 BACKUP_PREFIX = "backupapp_"
@@ -60,7 +61,7 @@ def make_uploader(sb: SelfBackup) -> Uploader:
         return ftp.FTPUploader(sb)
     if sb.protocol == "sftp":
         return sftp.SFTPUploader(sb)
-    raise ValueError(f"不支持的协议: {sb.protocol}")
+    raise ValueError(_("不支持的协议: {protocol}").format(protocol=sb.protocol))
 
 
 def prune_remote(u: Uploader, keep: int) -> int:

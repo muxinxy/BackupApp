@@ -8,6 +8,7 @@ from datetime import datetime
 
 import paramiko
 
+from ..i18n import _
 from ..model import SelfBackup
 from .base import BACKUP_PREFIX, RemoteFile, Uploader
 
@@ -15,7 +16,7 @@ from .base import BACKUP_PREFIX, RemoteFile, Uploader
 class SFTPUploader(Uploader):
     def __init__(self, sb: SelfBackup):
         if not sb.host:
-            raise ValueError("SFTP 未配置主机地址")
+            raise ValueError(_("SFTP 未配置主机地址"))
         self.host = sb.host
         self.port = sb.port or 22
         self.user = sb.username
@@ -38,7 +39,7 @@ class SFTPUploader(Uploader):
         try:
             with self._connect() as sftp:
                 sftp.listdir(self._remote())
-            return True, "连接成功"
+            return True, _("连接成功")
         except Exception as e:
             return False, str(e)
 

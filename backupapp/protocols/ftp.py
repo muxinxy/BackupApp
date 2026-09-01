@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from ftplib import FTP, FTP_TLS, error_perm
 
+from ..i18n import _
 from ..model import SelfBackup
 from .base import BACKUP_PREFIX, RemoteFile, Uploader
 
@@ -16,7 +17,7 @@ from .base import BACKUP_PREFIX, RemoteFile, Uploader
 class FTPUploader(Uploader):
     def __init__(self, sb: SelfBackup):
         if not sb.host:
-            raise ValueError("FTP 未配置主机地址")
+            raise ValueError(_("FTP 未配置主机地址"))
         self.host = sb.host
         self.port = sb.port or 21
         self.user = sb.username
@@ -53,7 +54,7 @@ class FTPUploader(Uploader):
         try:
             with self._connect() as ftp:
                 ftp.pwd()
-            return True, "连接成功"
+            return True, _("连接成功")
         except Exception as e:
             return False, str(e)
 

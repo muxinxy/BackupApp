@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .. import logging
+from ..i18n import _
 from ..storage import store
 from . import compress, link as linkmod, paths, retention
 
@@ -28,20 +29,25 @@ def restore_plan(plan_key: str, snapshot: str | None = None) -> RestoreResult:
     try:
         pair = store.load_plan(*plan_key.split("/", 1))
         if not pair:
-            raise ValueError(f"计划不存在: {plan_key}")
+            raise ValueError(_("计划不存在: {plan_key}").format(plan_key=plan_key))
         app, plan = pair
         if not plan.sources:
-            raise ValueError(f"计划 {plan_key} 没有配置源路径")
+            raise ValueError(
+                _("计划 {plan_key} 没有配置源路径").format(plan_key=plan_key))
         source = paths.expand(plan.sources[0])
         dest = paths.expand(plan.destination)
         live_dir = linkmod.live_dir_for(dest, app.id)
 
         entries = retention.list_entries(dest, app.id)
         if not entries:
-            raise ValueError(f"{dest} 下没有 {app.id} 的备份")
+            raise ValueError(
+                _("{dest} 下没有 {app_id} 的备份").format(dest=dest, app_id=app.id))
         entry = next((e for e in entries if not snapshot or snapshot in e), entries[0])
         if snapshot and not (snapshot in entry):
-            raise ValueError(f"找不到快照 {snapshot}，可用: {[retention.snapshot_of(e) for e in entries]}")
+            raise ValueError(
+                _("找不到快照 {snapshot}，可用: {available}").format(
+                    snapshot=snapshot,
+                    available=[retention.snapshot_of(e) for e in entries]))
 
         if plan.restore_mode == "link":
             if linkmod.is_link(source):
@@ -50,7 +56,8 @@ def restore_plan(plan_key: str, snapshot: str | None = None) -> RestoreResult:
                 linkmod.ensure_linked(source, live_dir, plan.link_type)
             else:
                 raise ValueError(
-                    f"live 目录 {live_dir} 已存在且 {source} 是真实目录，请手动处理")
+                    _("live 目录 {live_dir} 已存在且 {source} 是真实目录，请手动处理")
+                    .format(live_dir=live_dir, source=source))
         else:
             if linkmod.is_link(source):
                 linkmod.remove_link(source)

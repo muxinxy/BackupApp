@@ -11,6 +11,7 @@ from datetime import datetime
 
 from .. import logging, security
 from ..engine import compress
+from ..i18n import _
 from ..storage import store
 from .base import device_name, make_uploader, prune_remote
 
@@ -71,7 +72,7 @@ def run_self_backup(protocol: str | None = None) -> list[SelfBackupResult]:
     cfg = store.load_settings()
     sbs = [cfg.sb(protocol)] if protocol else cfg.enabled_sbs()
     if not sbs:
-        return [SelfBackupResult(False, error="自身备份未启用（设置中勾选至少一个协议）")]
+        return [SelfBackupResult(False, error=_("自身备份未启用（设置中勾选至少一个协议）"))]
     results = []
     for sb in sbs:
         results.append(_run_one(sb))
@@ -159,7 +160,7 @@ def run_self_restore(protocol: str, remote_name: str,
         compress.extract_archive(local_zip, staging, sb.archive_password)
         root = _find_self_root(staging)
         if root is None:
-            raise ValueError("归档内容不是自身备份（缺 settings.json）")
+            raise ValueError(_("归档内容不是自身备份（缺 settings.json）"))
         apps_dir = os.path.join(root, "apps")
         settings_file = os.path.join(root, "settings.json")
         # 备份当前数据到 .old 目录

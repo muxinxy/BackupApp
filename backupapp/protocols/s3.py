@@ -6,6 +6,7 @@ boto3 不跟随跨域重定向（HeadObject/GetObject 直接抛 302/403），
 改用 httpx 手动跟随：跨域时自动剥 Authorization，且不带 Referer，绕开 OSS 防盗链。
 """
 
+from ..i18n import _
 from ..model import SelfBackup
 from .base import BACKUP_PREFIX, RemoteFile, Uploader
 
@@ -13,7 +14,7 @@ from .base import BACKUP_PREFIX, RemoteFile, Uploader
 class S3Uploader(Uploader):
     def __init__(self, sb: SelfBackup):
         if not sb.bucket:
-            raise ValueError("S3 未配置 bucket")
+            raise ValueError(_("S3 未配置 bucket"))
         import boto3
         kwargs = {
             "aws_access_key_id": sb.username or None,
@@ -37,7 +38,7 @@ class S3Uploader(Uploader):
     def test(self) -> tuple[bool, str]:
         try:
             self.client.list_objects_v2(Bucket=self.bucket, MaxKeys=1)
-            return True, "连接成功"
+            return True, _("连接成功")
         except Exception as e:
             return False, str(e)
 
@@ -52,7 +53,9 @@ class S3Uploader(Uploader):
             ExpiresIn=300)
         r = httpx.get(url, follow_redirects=True, timeout=self.timeout)
         if r.status_code != 200:
-            raise RuntimeError(f"下载失败: HTTP {r.status_code} {r.text[:200]}")
+            raise RuntimeError(
+                _("下载失败: HTTP {status} {body}").format(
+                    status=r.status_code, body=r.text[:200]))
         with open(local_path, "wb") as f:
             f.write(r.content)
 

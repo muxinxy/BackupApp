@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import sys
 
+from ..i18n import _
+
 
 def is_link(path: str) -> bool:
     if os.path.islink(path):
@@ -42,7 +44,9 @@ def create_link(source: str, target: str, link_type: str) -> None:
         r = subprocess.run(["cmd", "/c", "mklink", f"/{kind}", source, target],
                            capture_output=True, text=True, creationflags=flags)
         if r.returncode != 0:
-            raise RuntimeError(f"创建链接失败: {r.stderr.strip() or r.stdout.strip()}")
+            raise RuntimeError(
+                _("创建链接失败: {detail}").format(
+                    detail=r.stderr.strip() or r.stdout.strip()))
     else:
         os.symlink(os.path.abspath(target), source)
 
