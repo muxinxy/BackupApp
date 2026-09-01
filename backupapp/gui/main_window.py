@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
 
 from ..model import BackupPlan
 from .. import __version__
+from ..i18n import _
 from ..storage import importexport, store
 from .app_dialog import AppDialog
 from .plan_dialog import PlanDialog
@@ -120,6 +121,16 @@ class MainWindow(QMainWindow):
         self.theme_combo.currentIndexChanged.connect(self._theme_changed)
         tb.addWidget(QLabel(" 主题:"))
         tb.addWidget(self.theme_combo)
+        # 语言切换（跟随系统/简体中文/English），持久化到 settings，重启后生效
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("跟随系统", "auto")
+        self.lang_combo.addItem("简体中文", "zh-CN")
+        self.lang_combo.addItem("English", "en")
+        self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(
+            store.load_settings().general.language)))
+        self.lang_combo.currentIndexChanged.connect(self._lang_changed)
+        tb.addWidget(QLabel(_("语言:")))
+        tb.addWidget(self.lang_combo)
         # 关于放工具栏最后
         tb.addSeparator()
         self._tool_group(tb, [self.act_about])
@@ -147,6 +158,14 @@ class MainWindow(QMainWindow):
         cfg.general.theme = name
         store.save_settings(cfg)
         theme.apply_theme(QApplication.instance(), name)
+
+    def _lang_changed(self):
+        from PySide6.QtWidgets import QMessageBox
+        from . import i18n  # noqa: F401  (仅用于占位，实际不重译)
+        cfg = store.load_settings()
+        cfg.general.language = self.lang_combo.currentData()
+        store.save_settings(cfg)
+        QMessageBox.information(self, _("语言"), _("语言更改将在重启后生效"))
 
     def _build_central(self):
         splitter_v = QSplitter(Qt.Vertical)

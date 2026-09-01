@@ -225,6 +225,15 @@ def main(argv: list[str] | None = None) -> int:
         if _s is not None:
             _s.reconfigure(encoding="utf-8", errors="replace")
 
+    # 预扫描 --data-dir（在 argparse 构造前），以便 --help 也能按语言渲染
+    _data_dir = None
+    for _i, _a in enumerate(sys.argv):
+        if _a == "--data-dir" and _i + 1 < len(sys.argv):
+            _data_dir = sys.argv[_i + 1]
+    store.set_data_root(_data_dir or _portable_root())
+    from .i18n import set_language
+    set_language(store.load_settings().general.language)
+
     p = argparse.ArgumentParser(prog="backupapp", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--data-dir", help="数据目录（默认便携：exe/当前目录下 data/）")

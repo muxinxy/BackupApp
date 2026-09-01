@@ -29,6 +29,8 @@ def main() -> int:
         if a == "--data-dir" and i + 1 < len(argv):
             data_dir = argv[i + 1]
     store.set_data_root(data_dir or _portable_root())
+    from ..i18n import set_language
+    set_language(store.load_settings().general.language)
     app = QApplication(argv)
     icon = _app_icon()
     if icon:

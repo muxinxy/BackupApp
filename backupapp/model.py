@@ -187,7 +187,7 @@ class AppConfig:
 
 @dataclass
 class General:
-    language: str = "zh-CN"
+    language: str = "auto"
     log_level: str = "info"
     max_log_size_mb: int = 5
     theme: str = "light"  # light | dark | system
@@ -198,7 +198,7 @@ class General:
 
     @classmethod
     def from_dict(cls, d: dict) -> "General":
-        return cls(language=str(d.get("language", "zh-CN")),
+        return cls(language=str(d.get("language", "auto")),
                    log_level=str(d.get("logLevel", "info")),
                    max_log_size_mb=int(d.get("maxLogSizeMB", 5)),
                    theme=str(d.get("theme", "light")))
