@@ -20,6 +20,7 @@ A portable, cross-platform backup tool for application configs and data. It prov
 - **Self backup / restore**: back up the tool's own config (`apps/` + `settings.json`) to remote storage (FTP/SFTP/S3/WebDAV), with per-protocol configs saved independently; the GUI can view the remote backup file list (name/size/time) and supports **restoring** or **deleting** a single backup; before restoring, current data is automatically moved to a `data/self_restore_old_*` safety net
 - **Remote gateway compatibility**: WebDAV works with OpenList and similar gateways (standard `{DAV:}` namespace, href URL decoding, GET 302 signed-address following); S3 list/download works through CDN/OSS gateways (boto3 + presigned URL)
 - **Import / export**: export the entire config as a zip and re-import it for migration. Export supports optional AES encryption; import can choose whether to overwrite apps with the same ID and whether to restore global settings (self-backup config/theme etc.); encrypted zips require a password
+- **Multilingual**: Simplified Chinese / English UI (GUI and CLI); language switchable from the toolbar or auto-detected from the OS; documentation (README / DEVELOPMENT / CHANGELOG) available in English
 
 ## Installation
 

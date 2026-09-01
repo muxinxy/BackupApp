@@ -3,7 +3,7 @@
 > This is the English version of CHANGELOG.md. The Chinese version is the authoritative source.
 > Chinese version: [CHANGELOG.md](CHANGELOG.md)
 
-## [Unreleased]
+## v1.1.0 (2026-09-02)
 
 - Added: bilingual support (Simplified Chinese / English) for the app UI, CLI, and documentation; English versions of README, DEVELOPMENT, and CHANGELOG.
 

@@ -2,7 +2,7 @@
 
 > English version: [CHANGELOG.en.md](CHANGELOG.en.md)
 
-## [Unreleased]
+## v1.1.0（2026-09-02）
 
 - 新增：应用界面、CLI 与文档的双语支持（简体中文 / 英文）；新增 README、DEVELOPMENT、CHANGELOG 的英文版本
 
