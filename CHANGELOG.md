@@ -1,5 +1,11 @@
 # 更新日志
 
+> English version: [CHANGELOG.en.md](CHANGELOG.en.md)
+
+## [Unreleased]
+
+- 新增：应用界面、CLI 与文档的双语支持（简体中文 / 英文）；新增 README、DEVELOPMENT、CHANGELOG 的英文版本
+
 ## v1.0.5（2026-08-24）
 
 - **备份实时进度**：日志面板显示 `计划 [已处理/总数] 文件名`（150ms 节流防刷屏）
