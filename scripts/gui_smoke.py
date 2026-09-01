@@ -31,6 +31,10 @@ store.save_app(AppConfig(id="testapp", name="Test App", plans=[plan]))
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from backupapp.i18n import set_language  # noqa: E402
+
+set_language("zh-CN")
+
 app = QApplication([])
 from backupapp.gui import theme  # noqa: E402
 
