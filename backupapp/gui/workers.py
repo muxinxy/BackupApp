@@ -5,6 +5,7 @@ worker 内统一加文件锁，防止与系统计划任务的备份进程并发�
 
 from PySide6.QtCore import QThread, Signal
 
+from ..i18n import _
 from ..storage import lock
 from ..util import format_size
 
@@ -41,7 +42,7 @@ class BackupWorker(QThread):
             self._emit_error(str(e))
             return
         except Exception as e:
-            self._emit_error(f"异常: {e}")
+            self._emit_error(_("异常: {e}").format(e=e))
             return
         if not isinstance(out, (list, tuple)):
             out = [out]
@@ -50,11 +51,15 @@ class BackupWorker(QThread):
             ok = bool(getattr(r, "ok", False))
             ok_n += int(ok)
             if ok:
-                msg = f"{getattr(r, 'files', 0)} 文件 / {format_size(getattr(r, 'bytes', 0))}"
+                msg = _("{n} 文件 / {size}").format(
+                    n=getattr(r, "files", 0),
+                    size=format_size(getattr(r, "bytes", 0)))
                 if getattr(r, "pruned", 0):
-                    msg += f" / 清理 {getattr(r, 'pruned', 0)} 个旧备份"
+                    msg += _(" / 清理 {n} 个旧备份").format(
+                        n=getattr(r, "pruned", 0))
             else:
-                msg = f"失败: {getattr(r, 'error', '未知错误')}"
+                msg = _("失败: {err}").format(
+                    err=getattr(r, "error", _("未知错误")))
             self.result.emit(getattr(r, "plan_key", "-"), ok, msg)
         self.finished_all.emit(ok_n, len(out))
 
@@ -72,7 +77,7 @@ class RestoreWorker(QThread):
             with lock.DataLock(lock.lock_path()):
                 out = self._fn()
         except Exception as e:
-            self.result.emit("-", False, f"异常: {e}")
+            self.result.emit("-", False, _("异常: {e}").format(e=e))
             self.finished_all.emit(0, 1)
             return
         if not isinstance(out, (list, tuple)):
@@ -82,9 +87,12 @@ class RestoreWorker(QThread):
             ok = bool(getattr(r, "ok", False))
             ok_n += int(ok)
             if ok:
-                msg = f"快照 {getattr(r, 'snapshot', '')} -> {getattr(r, 'target', '')}"
+                msg = _("快照 {snap} -> {target}").format(
+                    snap=getattr(r, "snapshot", ""),
+                    target=getattr(r, "target", ""))
             else:
-                msg = f"失败: {getattr(r, 'error', '未知错误')}"
+                msg = _("失败: {err}").format(
+                    err=getattr(r, "error", _("未知错误")))
             self.result.emit(getattr(r, "plan_key", "-"), ok, msg)
         self.finished_all.emit(ok_n, len(out))
 
@@ -122,7 +130,7 @@ class BatchTaskWorker(QThread):
             else:
                 ok += 1
                 self.result.emit(f"{app_id}/{p.id}", True,
-                                 "已注册" if self._register else "已取消注册")
+                                 _("已注册") if self._register else _("已取消注册"))
         self.finished_all.emit(ok, total)
 
 
@@ -179,9 +187,9 @@ class SelfRestoreWorker(QThread):
         r = run_self_restore(self._protocol, self._remote_name,
                              overwrite=self._overwrite)
         if r.ok:
-            self.done.emit(True, f"已恢复 {r.files} 个文件")
+            self.done.emit(True, _("已恢复 {n} 个文件").format(n=r.files))
         else:
-            self.done.emit(False, r.error or "恢复失败")
+            self.done.emit(False, r.error or _("恢复失败"))
 
 
 class SelfDeleteWorker(QThread):
@@ -197,4 +205,4 @@ class SelfDeleteWorker(QThread):
     def run(self):
         from ..protocols.runner import delete_remote_file
         err = delete_remote_file(self._protocol, self._remote_name)
-        self.done.emit(err is None, err or "已删除")
+        self.done.emit(err is None, err or _("已删除"))

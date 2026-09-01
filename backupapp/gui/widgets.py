@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from ..engine.paths import compact
+from ..i18n import _
 
 
 class WheelLock(QObject):
@@ -57,9 +58,9 @@ class PathListEditor(QWidget):
             "QListWidget::item { padding: 0px; margin: 0px; }")
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        btn_dir = QPushButton("添加目录")
-        btn_file = QPushButton("添加文件")
-        btn_del = QPushButton("删除选中")
+        btn_dir = QPushButton(_("添加目录"))
+        btn_file = QPushButton(_("添加文件"))
+        btn_del = QPushButton(_("删除选中"))
         btn_dir.clicked.connect(self._add_dir)
         btn_file.clicked.connect(self._add_file)
         btn_del.clicked.connect(self._remove_selected)
@@ -75,12 +76,12 @@ class PathListEditor(QWidget):
     # ---- 增 ----
 
     def _add_dir(self):
-        p = QFileDialog.getExistingDirectory(self, "选择目录")
+        p = QFileDialog.getExistingDirectory(self, _("选择目录"))
         if p:
             self.add_path(p)
 
     def _add_file(self):
-        p, _ = QFileDialog.getOpenFileName(self, "选择文件")
+        p, _ = QFileDialog.getOpenFileName(self, _("选择文件"))
         if p:
             self.add_path(p)
 
@@ -100,7 +101,7 @@ class PathListEditor(QWidget):
         lbl.setStyleSheet("border: none; background: transparent;")
         btn = QPushButton("✕")
         btn.setFixedSize(22, 22)
-        btn.setToolTip("删除该路径")
+        btn.setToolTip(_("删除该路径"))
         btn.setStyleSheet(
             "QPushButton { padding: 0; border-radius: 11px; background: #eef1f6; }"
             "QPushButton:hover { background: #fde8e8; color: #b91c1c; }")

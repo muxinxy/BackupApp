@@ -8,10 +8,12 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QTableWidgetItem, QVBoxLayout)
 
 from .. import scheduler as sched
+from ..i18n import _
 from ..storage import store
 from ..util import format_size as _fmt_size
 
 _PROTOCOLS = ["webdav", "s3", "ftp", "sftp"]
+# i18n:data
 _FREQ_LABEL = {"daily": "每天", "weekly": "每周", "days": "每N天",
                "hourly": "每N小时", "minutely": "每N分钟", "atLogon": "登录时"}
 _FREQ_REV = {v: k for k, v in _FREQ_LABEL.items()}  # 中文 -> 英文（旧数据兼容）
@@ -22,7 +24,7 @@ class SelfBackupDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("自身备份设置")
+        self.setWindowTitle(_("自身备份设置"))
         self.setMinimumWidth(460)
         cfg = store.load_settings()
         self._protocol = QComboBox()
@@ -33,7 +35,7 @@ class SelfBackupDialog(QDialog):
         self._old_sb = cfg.sb(default_proto)
         self._current_proto = default_proto
 
-        self._enabled = QCheckBox("启用自身备份")
+        self._enabled = QCheckBox(_("启用自身备份"))
         self._host = QLineEdit()
         self._port = QLineEdit()
         self._remote_path = QLineEdit()
@@ -45,23 +47,23 @@ class SelfBackupDialog(QDialog):
         self._endpoint = QLineEdit()
         self._credential_store = QComboBox()
         self._credential_store.addItems(["plain", "dpapi", "keyring"])
-        self._use_ssl = QCheckBox("使用 SSL/TLS")
+        self._use_ssl = QCheckBox(_("使用 SSL/TLS"))
         self._timeout = QSpinBox()
         self._timeout.setRange(1, 600)
         self._timeout.setValue(10)
-        self._timeout.setSuffix(" 秒")
+        self._timeout.setSuffix(_(" 秒"))
         self._retention = QSpinBox()
         self._retention.setRange(1, 9999)
         self._retention.setValue(30)
-        self._compress = QCheckBox("压缩")
+        self._compress = QCheckBox(_("压缩"))
         self._compress.setChecked(True)
         self._format = QComboBox()
         self._format.addItems(["zip", "7z", "tar.gz"])
         self._archive_password = QLineEdit()
         self._archive_password.setEchoMode(QLineEdit.Password)
-        self._local_copy = QCheckBox("同时保留本地副本（data/backups）")
+        self._local_copy = QCheckBox(_("同时保留本地副本（data/backups）"))
 
-        self._s3_box = QGroupBox("S3 专用")
+        self._s3_box = QGroupBox(_("S3 专用"))
         s3f = QFormLayout(self._s3_box)
         s3f.addRow("Bucket", self._bucket)
         s3f.addRow("Region", self._region)
@@ -69,24 +71,24 @@ class SelfBackupDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("", self._enabled)          # 0
-        form.addRow("协议", self._protocol)     # 1
-        form.addRow("主机", self._host)         # 2
-        form.addRow("端口", self._port)         # 3
-        form.addRow("远程路径", self._remote_path)  # 4
-        form.addRow("用户名", self._username)   # 5
-        form.addRow("密码", self._password)     # 6
+        form.addRow(_("协议"), self._protocol)   # 1
+        form.addRow(_("主机"), self._host)       # 2
+        form.addRow(_("端口"), self._port)       # 3
+        form.addRow(_("远程路径"), self._remote_path)  # 4
+        form.addRow(_("用户名"), self._username)  # 5
+        form.addRow(_("密码"), self._password)    # 6
         form.addRow(self._s3_box)               # 7
-        form.addRow("凭据存储", self._credential_store)  # 8
+        form.addRow(_("凭据存储"), self._credential_store)  # 8
         form.addRow("", self._use_ssl)          # 9
-        form.addRow("超时时间", self._timeout)  # 10
-        form.addRow("远程保留份数", self._retention)  # 11
+        form.addRow(_("超时时间"), self._timeout)  # 10
+        form.addRow(_("远程保留份数"), self._retention)  # 11
         form.addRow("", self._compress)         # 12
-        form.addRow("压缩格式", self._format)   # 13
-        form.addRow("压缩包密码", self._archive_password)  # 14
+        form.addRow(_("压缩格式"), self._format)  # 13
+        form.addRow(_("压缩包密码"), self._archive_password)  # 14
         form.addRow("", self._local_copy)       # 15
         self._form = form
 
-        self._test_btn = QPushButton("测试连接")
+        self._test_btn = QPushButton(_("测试连接"))
         self._test_btn.clicked.connect(self._test)
         form.addRow(self._test_btn)             # 16
 
@@ -129,7 +131,7 @@ class SelfBackupDialog(QDialog):
         self._username.setText(sb.username)
         self._password.setText(sb.password if sb.credential_store == "plain" else "")
         self._password.setPlaceholderText(
-            "" if sb.credential_store == "plain" else "已加密存储，留空保持原值")
+            "" if sb.credential_store == "plain" else _("已加密存储，留空保持原值"))
         self._bucket.setText(sb.bucket)
         self._region.setText(sb.region)
         self._endpoint.setText(sb.endpoint)
@@ -142,7 +144,7 @@ class SelfBackupDialog(QDialog):
         self._archive_password.setText(
             sb.archive_password if sb.credential_store == "plain" else "")
         self._archive_password.setPlaceholderText(
-            "" if sb.credential_store == "plain" else "已加密存储，留空保持原值")
+            "" if sb.credential_store == "plain" else _("已加密存储，留空保持原值"))
         self._local_copy.setChecked(sb.local_copy)
         self._sync_s3(sb.protocol)
 
@@ -155,9 +157,9 @@ class SelfBackupDialog(QDialog):
         self._form.setRowVisible(3, not is_s3)  # 端口
         # S3: 用户名=Access Key、密码=Secret Key、远程路径=Prefix
         lbl = self._form.labelForField
-        lbl(self._username).setText("Access Key" if is_s3 else "用户名")
-        lbl(self._password).setText("Secret Key" if is_s3 else "密码")
-        lbl(self._remote_path).setText("Prefix" if is_s3 else "远程路径")
+        lbl(self._username).setText(_("Access Key") if is_s3 else _("用户名"))
+        lbl(self._password).setText(_("Secret Key") if is_s3 else _("密码"))
+        lbl(self._remote_path).setText(_("Prefix") if is_s3 else _("远程路径"))
         # 行显隐后窗口高度不自动收缩，adjustSize 让按钮回到可视区
         self.adjustSize()
 
@@ -195,24 +197,27 @@ class SelfBackupDialog(QDialog):
                                       ("Access Key", sb.username),
                                       ("Secret Key", sb.password)) if not v]
             if missing:
-                QMessageBox.warning(self, "测试连接",
-                                    f"请先填写: {', '.join(missing)}")
+                QMessageBox.warning(self, _("测试连接"),
+                                    _("请先填写: {missing}").format(
+                                        missing=", ".join(missing)))
                 return
         elif not sb.host:
-            QMessageBox.warning(self, "测试连接", "请先填写主机地址")
+            QMessageBox.warning(self, _("测试连接"), _("请先填写主机地址"))
             return
         self._test_btn.setEnabled(False)
-        self._test_btn.setText("测试中...")
+        self._test_btn.setText(_("测试中..."))
         w = TestWorker(sb, self)
         self._test_worker = w
 
         def _done(ok: bool, msg: str):
             self._test_btn.setEnabled(True)
-            self._test_btn.setText("测试连接")
+            self._test_btn.setText(_("测试连接"))
             if ok:
-                QMessageBox.information(self, "测试连接", f"连接成功：{msg}")
+                QMessageBox.information(self, _("测试连接"),
+                                        _("连接成功：{msg}").format(msg=msg))
             else:
-                QMessageBox.critical(self, "测试连接", f"连接失败：{msg}")
+                QMessageBox.critical(self, _("测试连接"),
+                                     _("连接失败：{msg}").format(msg=msg))
 
         w.done.connect(_done)
         w.finished.connect(w.deleteLater)
@@ -226,9 +231,9 @@ class SelfBackupDialog(QDialog):
         # 未勾选启用时询问：避免保存了配置却忘了启用导致备份不执行
         if not sb.enabled:
             ret = QMessageBox.question(
-                self, "自身备份",
-                "当前未勾选“启用自身备份”，保存后备份不会执行。\n"
-                "是否现在启用？")
+                self, _("自身备份"),
+                _("当前未勾选“启用自身备份”，保存后备份不会执行。\n"
+                  "是否现在启用？"))
             if ret == QMessageBox.Yes:
                 sb.enabled = True
         old = store.load_settings().sb(sb.protocol)
@@ -236,8 +241,8 @@ class SelfBackupDialog(QDialog):
         if kind == "plain":
             if old.credential_store != "plain" and not sb.password:
                 QMessageBox.warning(
-                    self, "凭据",
-                    "密码字段为空，将保留原加密值；如需以明文保存请重新输入密码。")
+                    self, _("凭据"),
+                    _("密码字段为空，将保留原加密值；如需以明文保存请重新输入密码。"))
                 sb.password = old.password
                 sb.archive_password = old.archive_password
         else:
@@ -271,12 +276,12 @@ class SchedulerGroup(QGroupBox):
     """全局计划任务：点击"注册"创建系统任务，"取消注册"删除。"""
 
     def __init__(self, parent=None):
-        super().__init__("全局计划任务", parent)
+        super().__init__(_("全局计划任务"), parent)
         s = store.load_settings().scheduler
 
         self._freq = QComboBox()
         for val, label in _FREQ_LABEL.items():  # 中文显示，英文存储
-            self._freq.addItem(label, val)
+            self._freq.addItem(_(label), val)
         self._freq.setCurrentIndex(max(0, self._freq.findData(
             _FREQ_REV.get(s.frequency, s.frequency))))
         self._freq.currentIndexChanged.connect(self._sync)
@@ -299,7 +304,7 @@ class SchedulerGroup(QGroupBox):
         for d in range(1, 8):
             self._day.addItem(f"周{'一二三四五六日'[d - 1]}", d)
         self._day.setCurrentIndex(s.day_of_week - 1 if 1 <= s.day_of_week <= 7 else 0)
-        self._apply = QPushButton("注册")
+        self._apply = QPushButton(_("注册"))
         self._apply.clicked.connect(self._apply_clicked)
         self._status = QLabel()
 
@@ -314,11 +319,11 @@ class SchedulerGroup(QGroupBox):
 
         main = QHBoxLayout(self)
         main.setSpacing(16)  # 组间疏
-        g1 = group(); g1.addWidget(QLabel("频率")); g1.addWidget(self._freq); g1.addWidget(self._interval)
+        g1 = group(); g1.addWidget(QLabel(_("频率"))); g1.addWidget(self._freq); g1.addWidget(self._interval)
         main.addLayout(g1)
-        g2 = group(); g2.addWidget(QLabel("时间")); g2.addWidget(self._time)
+        g2 = group(); g2.addWidget(QLabel(_("时间"))); g2.addWidget(self._time)
         main.addLayout(g2)
-        g3 = group(); g3.addWidget(QLabel("星期")); g3.addWidget(self._day)
+        g3 = group(); g3.addWidget(QLabel(_("星期"))); g3.addWidget(self._day)
         main.addLayout(g3)
         main.addStretch(1)
         main.addWidget(self._apply)
@@ -335,12 +340,12 @@ class SchedulerGroup(QGroupBox):
 
     def refresh_status(self):
         st = sched.status(store.load_settings())
-        text = {"registered": "已注册", "missing": "未注册",
-                "pathMismatch": "路径变更，需重新应用"}.get(st, st)
+        text = {"registered": _("已注册"), "missing": _("未注册"),
+                "pathMismatch": _("路径变更，需重新应用")}.get(st, st)
         color = "green" if st == "registered" else "gray"
-        self._status.setText(f"状态: {text}")
+        self._status.setText(_("状态: {text}").format(text=text))
         self._status.setStyleSheet(f"color: {color};")
-        self._apply.setText("取消注册" if st == "registered" else "注册")
+        self._apply.setText(_("取消注册") if st == "registered" else _("注册"))
 
     def _read_form(self, cfg) -> None:
         freq = self._freq.currentData()
@@ -357,11 +362,13 @@ class SchedulerGroup(QGroupBox):
         if sched.status(cfg) == "registered":
             err = sched.uninstall(cfg)
             if err:
-                QMessageBox.warning(self, "计划任务", f"取消注册失败：{err}")
+                QMessageBox.warning(self, _("计划任务"),
+                                    _("取消注册失败：{err}").format(err=err))
         else:
             err = sched.install(cfg)
             if err:
-                QMessageBox.warning(self, "计划任务", f"注册失败：{err}")
+                QMessageBox.warning(self, _("计划任务"),
+                                    _("注册失败：{err}").format(err=err))
         self.refresh_status()
 
 
@@ -372,7 +379,7 @@ class SelfBackupFilesDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("自身备份文件")
+        self.setWindowTitle(_("自身备份文件"))
         self.resize(720, 420)
         cfg = store.load_settings()
         self._protocol = QComboBox()
@@ -385,14 +392,15 @@ class SelfBackupFilesDialog(QDialog):
 
         lay = QVBoxLayout(self)
         top = QHBoxLayout()
-        top.addWidget(QLabel("协议:"))
+        top.addWidget(QLabel(_("协议:")))
         top.addWidget(self._protocol)
         self._status = QLabel("")
         top.addWidget(self._status, 1)
         lay.addLayout(top)
 
         self._table = QTableWidget(0, 3)
-        self._table.setHorizontalHeaderLabels(["文件名", "大小", "备份时间"])
+        self._table.setHorizontalHeaderLabels(
+            [_("文件名"), _("大小"), _("备份时间")])
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -404,10 +412,10 @@ class SelfBackupFilesDialog(QDialog):
         lay.addWidget(self._table, 1)
 
         btns = QHBoxLayout()
-        self._btn_refresh = QPushButton("刷新")
-        self._btn_restore = QPushButton("恢复选中")
-        self._btn_delete = QPushButton("删除选中")
-        self._btn_close = QPushButton("关闭")
+        self._btn_refresh = QPushButton(_("刷新"))
+        self._btn_restore = QPushButton(_("恢复选中"))
+        self._btn_delete = QPushButton(_("删除选中"))
+        self._btn_close = QPushButton(_("关闭"))
         self._btn_refresh.clicked.connect(self._refresh)
         self._btn_restore.clicked.connect(self._restore_selected)
         self._btn_delete.clicked.connect(self._delete_selected)
@@ -435,7 +443,7 @@ class SelfBackupFilesDialog(QDialog):
     def _refresh(self):
         from .workers import SelfListWorker
         self._table.setRowCount(0)
-        self._status.setText("加载中...")
+        self._status.setText(_("加载中..."))
         self._btn_refresh.setEnabled(False)
         w = SelfListWorker(self._protocol.currentText(), self)
         self._workers.append(w)
@@ -444,10 +452,10 @@ class SelfBackupFilesDialog(QDialog):
             self._btn_refresh.setEnabled(True)
             self._workers.remove(w)
             if err:
-                self._status.setText(f"加载失败: {err}")
+                self._status.setText(_("加载失败: {err}").format(err=err))
                 return
             self._populate(files or [])
-            self._status.setText(f"共 {len(files or [])} 个备份")
+            self._status.setText(_("共 {n} 个备份").format(n=len(files or [])))
 
         w.done.connect(_done)
         w.finished.connect(w.deleteLater)
@@ -460,7 +468,7 @@ class SelfBackupFilesDialog(QDialog):
             name_item = QTableWidgetItem(f.name)
             name_item.setToolTip(f.name)
             size_item = QTableWidgetItem(_fmt_size(f.size))
-            size_item.setToolTip(f"{f.size} 字节" if f.size else "-")
+            size_item.setToolTip(_("{size} 字节").format(size=f.size) if f.size else "-")
             ts = f.mtime.replace("T", " ")[:19] if f.mtime else "-"
             time_item = QTableWidgetItem(ts)
             time_item.setToolTip(f.mtime if f.mtime else "-")
@@ -479,17 +487,18 @@ class SelfBackupFilesDialog(QDialog):
     def _restore_selected(self, *_):
         name = self._selected_name()
         if not name:
-            QMessageBox.information(self, "恢复", "请先选择一个备份文件")
+            QMessageBox.information(self, _("恢复"), _("请先选择一个备份文件"))
             return
         box = QMessageBox(self)
-        box.setWindowTitle("恢复自身备份")
+        box.setWindowTitle(_("恢复自身备份"))
         box.setIcon(QMessageBox.Question)
-        box.setText(f"将从远程恢复 {name}，覆盖当前 apps/ 与 settings.json？\n"
-                    f"（恢复前会把当前数据移到 data/self_restore_old_* 备份）")
-        overwrite_btn = box.addButton("覆盖（推荐）", QMessageBox.YesRole)
-        merge_btn = box.addButton("仅新增（保留现有同 ID 应用）",
+        box.setText(_("将从远程恢复 {name}，覆盖当前 apps/ 与 settings.json？\n"
+                      "（恢复前会把当前数据移到 data/self_restore_old_* 备份）"
+                      ).format(name=name))
+        overwrite_btn = box.addButton(_("覆盖（推荐）"), QMessageBox.YesRole)
+        merge_btn = box.addButton(_("仅新增（保留现有同 ID 应用）"),
                                   QMessageBox.NoRole)
-        cancel_btn = box.addButton("取消", QMessageBox.RejectRole)
+        cancel_btn = box.addButton(_("取消"), QMessageBox.RejectRole)
         box.exec()
         if box.clickedButton() is cancel_btn:
             return
@@ -504,11 +513,12 @@ class SelfBackupFilesDialog(QDialog):
             self._set_busy(False)
             self._workers.remove(w)
             if ok:
-                QMessageBox.information(self, "恢复", f"恢复成功：{msg}")
+                QMessageBox.information(self, _("恢复"),
+                                        _("恢复成功：{msg}").format(msg=msg))
                 self._refresh()
                 self.restored.emit()
             else:
-                QMessageBox.critical(self, "恢复失败", msg)
+                QMessageBox.critical(self, _("恢复失败"), msg)
 
         w.done.connect(_done)
         w.finished.connect(w.deleteLater)
@@ -517,10 +527,10 @@ class SelfBackupFilesDialog(QDialog):
     def _delete_selected(self):
         name = self._selected_name()
         if not name:
-            QMessageBox.information(self, "删除", "请先选择一个备份文件")
+            QMessageBox.information(self, _("删除"), _("请先选择一个备份文件"))
             return
-        ret = QMessageBox.question(self, "删除备份",
-                                   f"确定删除远程备份 {name}？")
+        ret = QMessageBox.question(self, _("删除备份"),
+                                   _("确定删除远程备份 {name}？").format(name=name))
         if ret != QMessageBox.Yes:
             return
         from .workers import SelfDeleteWorker
@@ -537,7 +547,7 @@ class SelfBackupFilesDialog(QDialog):
                 self._refresh()
                 self.restored.emit()
             else:
-                QMessageBox.critical(self, "删除失败", msg)
+                QMessageBox.critical(self, _("删除失败"), msg)
 
         w.done.connect(_done)
         w.finished.connect(w.deleteLater)
@@ -550,4 +560,4 @@ class SelfBackupFilesDialog(QDialog):
         # 进行中显示不定进度动画（右下角状态栏同样由主窗口 busy_bar 呈现）
         self._busy_bar.setVisible(busy)
         if busy:
-            self._status.setText("处理中...")
+            self._status.setText(_("处理中..."))
