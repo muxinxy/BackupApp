@@ -295,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
         store.set_data_root(_portable_root())
 
     from . import logging as applog
-    applog.get_logger().info("CLI 启动")
+    applog.get_logger().info(_("CLI 启动"))
 
     # 无子命令（如双击 exe）默认启动 GUI
     if not args.cmd:

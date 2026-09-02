@@ -64,7 +64,7 @@ def restore_plan(plan_key: str, snapshot: str | None = None) -> RestoreResult:
             if os.path.exists(source):
                 old = f"{source}.{datetime.now().strftime('%Y%m%d_%H%M%S')}.old"
                 os.rename(source, old)
-                logging.get_logger().info("restore: 原目录改名保护 -> %s", old)
+                logging.get_logger().info(_("restore: 原目录改名保护 -> %s"), old)
             os.makedirs(source, exist_ok=True)
             staging = entry if os.path.isdir(entry) else None
             if staging is None:

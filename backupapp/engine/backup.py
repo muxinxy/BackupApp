@@ -74,7 +74,7 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
         try:
             hooks.run_hook(plan.post_cmd, plan.cmd_timeout, plan_key, _("备份后"))
         except RuntimeError as e:
-            logging.get_logger().warning("[%s] 备份后钩子失败: %s", plan_key, e)
+            logging.get_logger().warning(_("[%s] 备份后钩子失败: %s"), plan_key, e)
 
         plan.last_run_at = datetime.now().isoformat(timespec="seconds")
         plan.updated_at = plan.last_run_at

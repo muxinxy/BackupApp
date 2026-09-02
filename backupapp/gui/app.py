@@ -8,6 +8,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from .. import logging as applog
+from ..i18n import _
 from ..storage import store
 
 
@@ -41,7 +42,7 @@ def main() -> int:
     w = MainWindow()
     if icon:
         w.setWindowIcon(icon)  # 窗口左上角图标
-    applog.get_logger().info("GUI 启动")
+    applog.get_logger().info(_("GUI 启动"))
     w.showMaximized()  # 默认全屏（最大化）打开
     return app.exec()
 

@@ -26,7 +26,7 @@ def run_hook(cmd: str, timeout: int, plan_key: str, when: str) -> None:
                 _("{when}钩子退出码 {code}:\n{detail}").format(
                     when=when, code=r.returncode, detail=detail))
         if r.stdout and r.stdout.strip():
-            logging.get_logger().info("[%s] %s钩子输出: %s",
+            logging.get_logger().info(_("[%s] %s钩子输出: %s"),
                                       plan_key, when, r.stdout.strip()[-200:])
     except subprocess.TimeoutExpired:
         raise RuntimeError(

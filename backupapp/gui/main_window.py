@@ -1,6 +1,7 @@
 """主窗口：应用列表 + 计划表格 + 日志面板 + 工具栏（调度/自身备份/脚本）。"""
 
 import os
+import sys
 from datetime import datetime
 
 from PySide6.QtCore import Qt
@@ -163,11 +164,14 @@ class MainWindow(QMainWindow):
         theme.apply_theme(QApplication.instance(), name)
 
     def _lang_changed(self):
-        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtCore import QProcess
+        from PySide6.QtWidgets import QApplication
         cfg = store.load_settings()
         cfg.general.language = self.lang_combo.currentData()
         store.save_settings(cfg)
-        QMessageBox.information(self, _("语言"), _("语言更改将在重启后生效"))
+        # 自动重启：保存后立即以新语言重启（原样保留 --data-dir 等启动参数）
+        QProcess.startDetached(sys.executable, sys.argv)
+        QApplication.quit()
 
     def _build_central(self):
         splitter_v = QSplitter(Qt.Vertical)
