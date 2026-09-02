@@ -3,6 +3,11 @@
 > This is the English version of CHANGELOG.md. The Chinese version is the authoritative source.
 > Chinese version: [CHANGELOG.md](CHANGELOG.md)
 
+## v1.1.1 (2026-09-02)
+
+- **Auto-restart on language switch**: the app restarts automatically so the new language takes effect
+- **Bilingual logs**: Chinese log fragments in the log panel and backup.log now follow the UI language (Simplified Chinese / English)
+
 ## v1.1.0 (2026-09-02)
 
 - Added: bilingual support (Simplified Chinese / English) for the app UI, CLI, and documentation; English versions of README, DEVELOPMENT, and CHANGELOG.

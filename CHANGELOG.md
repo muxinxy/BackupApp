@@ -2,6 +2,11 @@
 
 > English version: [CHANGELOG.en.md](CHANGELOG.en.md)
 
+## v1.1.1（2026-09-02）
+
+- **切换语言自动重启**：语言切换后应用自动重启以新语言生效，无需手动重启
+- **日志双语**：日志面板与 backup.log 的中文日志片段随界面语言切换（简体中文 / English）
+
 ## v1.1.0（2026-09-02）
 
 - 新增：应用界面、CLI 与文档的双语支持（简体中文 / 英文）；新增 README、DEVELOPMENT、CHANGELOG 的英文版本
