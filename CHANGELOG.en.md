@@ -3,6 +3,12 @@
 > This is the English version of CHANGELOG.md. The Chinese version is the authoritative source.
 > Chinese version: [CHANGELOG.md](CHANGELOG.md)
 
+## v1.1.2 (2026-09-06)
+
+- **New architecture artifacts**: CI now builds 5 platform artifacts — Windows x64, macOS x64 / ARM64, Linux x64 / ARM64 (new native macOS ARM64 and Linux ARM64 builds)
+- **Fixed macOS x64 artifact**: the previous `backupapp-macos-x64` was mistakenly built on Apple Silicon runners (actually an ARM64 binary); now uses the Intel runner `macos-15-intel` for a true x64 build
+- macOS codesign/notarization now covers both macOS artifacts
+
 ## v1.1.1 (2026-09-02)
 
 - **Auto-restart on language switch**: the app restarts automatically so the new language takes effect

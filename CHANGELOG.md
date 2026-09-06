@@ -2,6 +2,12 @@
 
 > English version: [CHANGELOG.en.md](CHANGELOG.en.md)
 
+## v1.1.2（2026-09-06）
+
+- **新增架构产物**：CI 现在构建 5 个平台产物 —— Windows x64、macOS x64 / ARM64、Linux x64 / ARM64（新增 macOS ARM64 与 Linux ARM64 原生构建）
+- **修复 macOS x64 产物**：此前的 `backupapp-macos-x64` 误在 Apple Silicon runner 上构建（实为 ARM64 二进制），改用 Intel runner `macos-15-intel` 后恢复真正的 x64 构建
+- macOS 签名公证流程改为同时覆盖两个 macOS 产物
+
 ## v1.1.1（2026-09-02）
 
 - **切换语言自动重启**：语言切换后应用自动重启以新语言生效，无需手动重启

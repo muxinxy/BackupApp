@@ -18,11 +18,19 @@ jobs:
           - os: windows-latest
             artifact: backupapp-windows-x64
             ext: zip
-          - os: macos-latest
+          # macos-13 已于 2025-12-04 退役，Intel 构建改用 macos-15-intel
+          #（该镜像也将于 2027 秋 macOS 15 退役后终止，届时需评估是否放弃 x64 包）
+          - os: macos-15-intel
             artifact: backupapp-macos-x64
+            ext: zip
+          - os: macos-latest
+            artifact: backupapp-macos-arm64
             ext: zip
           - os: ubuntu-latest
             artifact: backupapp-linux-x64
+            ext: tar.gz
+          - os: ubuntu-24.04-arm
+            artifact: backupapp-linux-arm64
             ext: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
@@ -120,24 +128,29 @@ jobs:
         shell: bash
         run: |
           set -e
-          cd dist/backupapp-macos-x64
-          rm -rf backupapp && unzip -q backupapp-macos-x64.zip
           echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
           security create-keychain -p temp build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p temp build.keychain
           security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k temp build.keychain
-          codesign --force --options runtime --sign "$CODESIGN_IDENTITY" backupapp/backupapp
-          codesign --force --options runtime --sign "$CODESIGN_IDENTITY" backupapp/backupapp-cli
-          xcrun notarytool submit backupapp/backupapp \
-            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
-            --wait
-          xcrun stapler staple backupapp/backupapp
-          zip -qry ../backupapp-macos-x64-signed.zip backupapp
+          for dir in dist/backupapp-macos-*/; do
+            name=$(basename "$dir")
+            (
+              cd "$dir"
+              rm -rf backupapp && unzip -q "$name.zip"
+              codesign --force --options runtime --sign "$CODESIGN_IDENTITY" backupapp/backupapp
+              codesign --force --options runtime --sign "$CODESIGN_IDENTITY" backupapp/backupapp-cli
+              xcrun notarytool submit backupapp/backupapp \
+                --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+                --wait
+              xcrun stapler staple backupapp/backupapp
+              zip -qry "../$name-signed.zip" backupapp
+            )
+          done
       - name: release (signed)
         if: steps.check.outputs.ok == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/backupapp-macos-x64/../backupapp-macos-x64-signed.zip
+          files: dist/backupapp-macos-*-signed.zip
           append_body: true
