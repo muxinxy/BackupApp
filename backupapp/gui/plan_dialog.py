@@ -6,7 +6,7 @@ from datetime import datetime
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFileDialog, QFormLayout, QHBoxLayout, QLabel,
                                QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
-                               QSpinBox, QVBoxLayout)
+                               QSpinBox, QVBoxLayout, QWidget)
 
 from ..engine.paths import compact
 from ..i18n import _
@@ -90,13 +90,15 @@ class PlanDialog(QDialog):
         self._link_type.addItem(_("symlink（需管理员/开发者模式）"), "symlink")
         self._link_type.setCurrentIndex(0 if (plan is None or plan.link_type == "junction") else 1)
 
-        # 命令/脚本钩子：备份前/后执行，可设超时
+        # 命令/脚本钩子：备份前/后执行，可设超时；可直接输入命令或点"浏览"选脚本文件
         self._pre_cmd = QLineEdit(plan.pre_cmd if plan else "")
         self._pre_cmd.setPlaceholderText(
             _("备份开始前执行（非零退出或超时则中止本次备份），如 net stop MyService"))
         self._post_cmd = QLineEdit(plan.post_cmd if plan else "")
         self._post_cmd.setPlaceholderText(
             _("备份完成后执行（失败仅记日志），如 net start MyService"))
+        pre_row = self._cmd_row(self._pre_cmd)
+        post_row = self._cmd_row(self._post_cmd)
         self._cmd_timeout = QSpinBox()
         self._wheel_locks.append(WheelLock(self._cmd_timeout))
         self._cmd_timeout.setRange(1, 3600)
@@ -159,8 +161,8 @@ class PlanDialog(QDialog):
         form.addRow(_("备份方式"), self._backup_mode)
         form.addRow(_("恢复方式"), self._restore_mode)
         form.addRow(_("链接类型"), self._link_type)
-        form.addRow(_("备份前命令"), self._pre_cmd)
-        form.addRow(_("备份后命令"), self._post_cmd)
+        form.addRow(_("备份前命令"), pre_row)
+        form.addRow(_("备份后命令"), post_row)
         form.addRow(_("命令超时"), timeout_row)
         form.addRow(_("计划任务"), self._schedule_mode)
         form.addRow(_("频率"), freq_row)
@@ -184,6 +186,33 @@ class PlanDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.addWidget(scroll)
         lay.addWidget(btns)
+
+    def _cmd_row(self, edit: QLineEdit) -> QWidget:
+        """命令输入行 = 输入框 + 浏览按钮（选脚本文件直接填入）。"""
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(edit, 1)
+        btn = QPushButton(_("浏览"))
+        btn.clicked.connect(lambda: self._browse_cmd(edit))
+        row.addWidget(btn)
+        wrap = QWidget()
+        wrap.setLayout(row)
+        return wrap
+
+    def _browse_cmd(self, edit: QLineEdit):
+        """选择脚本文件：Windows 下 bat/cmd/ps1，mac/Linux 下 sh。"""
+        import sys
+        if sys.platform == "win32":
+            script_filter = _("脚本 (*.bat;*.cmd;*.ps1)")
+        else:
+            script_filter = _("脚本 (*.sh)")
+        cur = edit.text().strip().strip('"')
+        start_dir = os.path.dirname(cur) if cur and os.path.isabs(cur) else ""
+        path, _filt = QFileDialog.getOpenFileName(
+            self, _("选择文件"), start_dir,
+            f"{script_filter};;{_('所有文件 (*.*)')}")
+        if path:
+            edit.setText(path)
 
     def _sync_schedule(self):
         """与全局一致时置灰自定义排期；间隔/时间/星期按频率联动。"""

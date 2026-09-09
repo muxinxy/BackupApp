@@ -206,3 +206,29 @@ class SelfDeleteWorker(QThread):
         from ..protocols.runner import delete_remote_file
         err = delete_remote_file(self._protocol, self._remote_name)
         self.done.emit(err is None, err or _("已删除"))
+
+
+class SchedRefreshWorker(QThread):
+    """后台查询系统计划任务注册状态，避免主线程冻结。
+
+    schtasks /query /v 冷缓存时可达数秒；注册任务集与全局状态共用一次查询
+    （scheduler 内部 5 秒 TTL）。done 的两个参数在查询失败时为 None。
+    """
+
+    done = Signal(object, object)  # registered: set|None, global_status: str|None
+
+    def __init__(self, cfg, parent=None):
+        super().__init__(parent)
+        self._cfg = cfg
+
+    def run(self):
+        from .. import scheduler as sched
+        try:
+            registered = sched.registered_plan_tasks()
+        except Exception:
+            registered = None
+        try:
+            st = sched.status(self._cfg)
+        except Exception:
+            st = None
+        self.done.emit(registered, st)

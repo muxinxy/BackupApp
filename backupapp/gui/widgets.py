@@ -81,7 +81,7 @@ class PathListEditor(QWidget):
             self.add_path(p)
 
     def _add_file(self):
-        p, _ = QFileDialog.getOpenFileName(self, _("选择文件"))
+        p, _filt = QFileDialog.getOpenFileName(self, _("选择文件"))
         if p:
             self.add_path(p)
 

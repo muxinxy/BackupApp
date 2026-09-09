@@ -329,7 +329,9 @@ class SchedulerGroup(QGroupBox):
         main.addWidget(self._apply)
         main.addWidget(self._status)
         self._sync()  # 按频率联动：间隔/时间/星期
-        self.refresh_status()
+        self.set_state(None)
+        # 注册/取消注册后的状态由主窗口后台刷新（回调），避免界面内再起子进程
+        self.after_change = None
 
     def _sync(self):
         f = self._freq.currentData()
@@ -338,8 +340,13 @@ class SchedulerGroup(QGroupBox):
         self._time.setEnabled(f in ("daily", "weekly"))
         self._day.setEnabled(f == "weekly")
 
-    def refresh_status(self):
-        st = sched.status(store.load_settings())
+    def set_state(self, st: str | None):
+        """按后台查询结果更新状态文案与按钮（None = 查询中）。"""
+        self._st = st
+        if st is None:
+            self._status.setText(_("状态: {text}").format(text=_("查询中...")))
+            self._status.setStyleSheet("color: gray;")
+            return
         text = {"registered": _("已注册"), "missing": _("未注册"),
                 "pathMismatch": _("路径变更，需重新应用")}.get(st, st)
         color = "green" if st == "registered" else "gray"
@@ -356,20 +363,28 @@ class SchedulerGroup(QGroupBox):
         store.save_settings(cfg)
 
     def _apply_clicked(self):
-        """点击注册/取消注册操作系统任务（按系统当前状态切换）。"""
+        """点击注册/取消注册操作系统任务（按当前显示的注册状态切换）。"""
         cfg = store.load_settings()
         self._read_form(cfg)
-        if sched.status(cfg) == "registered":
+        if self._st == "registered":
             err = sched.uninstall(cfg)
             if err:
                 QMessageBox.warning(self, _("计划任务"),
                                     _("取消注册失败：{err}").format(err=err))
+            else:
+                self._st = None
         else:
             err = sched.install(cfg)
             if err:
                 QMessageBox.warning(self, _("计划任务"),
                                     _("注册失败：{err}").format(err=err))
-        self.refresh_status()
+            else:
+                self._st = None
+        # 注册/注销后状态未知，交给主窗口后台刷新（本组件不直接查询系统）
+        if self._st is None:
+            self.set_state(None)
+        if self.after_change:
+            self.after_change()
 
 
 class SelfBackupFilesDialog(QDialog):

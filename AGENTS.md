@@ -38,6 +38,9 @@ pwsh scripts\build.ps1                                # PyInstaller 构建 dist\
 
 ## 已知坑（详见 DEVELOPMENT.md §3.4/§3.11/§7）
 
+- `schtasks /query /fo csv /v` 冷查询可达数秒（本机实测 ~3.9s）。**GUI 线程禁止同步调 `scheduler` 查询**——注册状态一律走 `gui/workers.py` 的 `SchedRefreshWorker`（单飞，结果喂 `MainWindow._registered_plans` 与 `SchedulerGroup.set_state`）。
+- `schtasks` 输出按系统 ANSI 码页（中文系统 GBK）：`scheduler._run` 已显式 `encoding="mbcs"`，别改成默认 utf-8。
+- 主题是 QSS + QPalette 双层：改色板同步动 `theme._build_palette`，否则未命中 QSS 的普通 QWidget（滚动区视口/表单容器）在暗黑主题下会退回浅色 Fusion 调色板变白。
 - WebDAV PROPFIND 解析用大写 `{DAV:}` 命名空间；下载需 `follow_redirects=True`（302 到签名地址）。
 - S3 下载走 `generate_presigned_url` + httpx GET（boto3 `download_file` 的 HeadObject 会被网关 403）。
 - FTP：下载前显式 `voidcmd("TYPE I")`；TLS 失败自动降级；PASV 超时用 `_retry`。SFTP 用 `open().write()/read()` 流式而非 `put()/get()`。

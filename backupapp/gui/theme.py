@@ -373,6 +373,47 @@ def detect_dark(app) -> bool:
         return False
 
 
+def _build_palette(name: str):
+    """与 QSS 色板一致的 QPalette。
+
+    QSS 只影响命中的控件；未命中的普通 QWidget（滚动区视口、表单容器等）会
+    退回到 Fusion 的默认浅色调色板，暗黑主题下出现大片白色。这里把调色板
+    对齐 QSS 的主色，未命中控件也随主题。
+    """
+    from PySide6.QtGui import QPalette
+    cols = {
+        "dark": dict(window="#0f172a", windowText="#e2e8f0", base="#0f172a",
+                     alternateBase="#16233a", text="#e2e8f0", button="#334155",
+                     buttonText="#e2e8f0", highlight="#2563eb",
+                     highlightedText="#ffffff", toolTipBase="#1e293b",
+                     toolTipText="#e2e8f0", placeholder="#64748b",
+                     link="#60a5fa", light="#3b4758", midlight="#475569",
+                     mid="#334155", dark="#1a2740", shadow="#020617"),
+        "light": dict(window="#eef2f7", windowText="#1e293b", base="#ffffff",
+                      alternateBase="#f6f8fc", text="#1e293b", button="#e8edf5",
+                      buttonText="#1e293b", highlight="#2563eb",
+                      highlightedText="#ffffff", toolTipBase="#ffffff",
+                      toolTipText="#1e293b", placeholder="#9aa4b1",
+                      link="#2563eb", light="#ffffff", midlight="#f1f5fb",
+                      mid="#dde3ec", dark="#cfd8e4", shadow="#94a3b8"),
+    }[name]
+    p = QPalette()
+    role_map = {
+        "window": QPalette.Window, "windowText": QPalette.WindowText,
+        "base": QPalette.Base, "alternateBase": QPalette.AlternateBase,
+        "text": QPalette.Text, "button": QPalette.Button,
+        "buttonText": QPalette.ButtonText, "highlight": QPalette.Highlight,
+        "highlightedText": QPalette.HighlightedText,
+        "toolTipBase": QPalette.ToolTipBase, "toolTipText": QPalette.ToolTipText,
+        "placeholder": QPalette.PlaceholderText, "link": QPalette.Link,
+        "light": QPalette.Light, "midlight": QPalette.Midlight,
+        "mid": QPalette.Mid, "dark": QPalette.Dark, "shadow": QPalette.Shadow,
+    }
+    for key, hexv in cols.items():
+        p.setColor(role_map[key], QColor(hexv))
+    return p
+
+
 def apply_theme(app, name: str) -> None:
     """name: light | dark | system。更新全局样式与 current。"""
     global current
@@ -381,6 +422,7 @@ def apply_theme(app, name: str) -> None:
         name = "dark" if detect_dark(app) else "light"
     current = name
     app.setStyle("Fusion")
+    app.setPalette(_build_palette(name))
     qss = (DARK if name == "dark" else LIGHT).replace("{{ICONS}}", _ICONS_URL)
     app.setStyleSheet(qss)
 

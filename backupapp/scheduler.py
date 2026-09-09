@@ -69,6 +69,9 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     kwargs = {}
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # 避免从 GUI 弹出终端
+        # schtasks 输出按系统 ANSI 码页（中文系统 cp936），默认 utf-8 解码会崩
+        kwargs["encoding"] = "mbcs"
+        kwargs["errors"] = "replace"
     try:
         return subprocess.run(cmd, capture_output=True, text=True,
                               timeout=20, **kwargs)

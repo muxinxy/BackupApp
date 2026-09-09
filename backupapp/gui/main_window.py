@@ -41,14 +41,28 @@ class MainWindow(QMainWindow):
         self._workers: list = []
         self._app_id: str | None = None
         self._plans: list[BackupPlan] = []
+        # 已注册计划任务集合：由后台 SchedRefreshWorker 维护，界面只读缓存
+        self._registered_plans: set[str] = set()
+        self._sched_worker = None
+        self._sched_pending = False
 
         self._build_toolbar()
         self._build_central()
         self._build_statusbar()
+        # 全局计划任务状态由后台查询刷新（schtasks 冷查询可达数秒，不能堵 UI 线程）
+        self.sched_group.after_change = self._sched_refresh_async
 
         self.refresh_apps()
         self._load_log_tail()
-        self.sched_group.refresh_status()
+        self._sched_refresh_async()
+
+    def closeEvent(self, event):
+        """退出时收尾后台调度查询线程，避免 QThread destroyed while running。"""
+        if self._sched_worker is not None and self._sched_worker.isRunning():
+            if not self._sched_worker.wait(3000):
+                self._sched_worker.terminate()
+                self._sched_worker.wait(500)
+        super().closeEvent(event)
 
     # ---------- 构建 ----------
 
@@ -333,19 +347,58 @@ class MainWindow(QMainWindow):
             app = store.load_app(self._app_id)
             if app:
                 self._plans = app.plans
-        # 一次系统查询批量获取已注册的计划任务（避免每行一次子进程）
-        self._registered_plans = set()
-        if self._app_id:
-            try:
-                from .. import scheduler as sched
-                reg = sched.registered_plan_tasks()
-                self._registered_plans = {
-                    p.id for p in self._plans
-                    if sched.plan_task_name(self._app_id, p.id) in reg}
-            except Exception:
-                pass
         self._render_plans()
         self.refresh_plan_task_state()
+        # 注册状态查询在后台执行，完成后只刷新任务列，避免阻塞 UI 线程
+        self._sched_refresh_async()
+
+    # ---------- 后台刷新系统任务注册状态 ----------
+
+    def _sched_refresh_async(self):
+        """后台查询已注册计划任务 + 全局任务状态（单飞，防重复起子进程）。"""
+        if self._sched_worker is not None:
+            self._sched_pending = True
+            return
+        from .workers import SchedRefreshWorker
+        w = SchedRefreshWorker(store.load_settings(), self)
+        self._sched_worker = w
+        w.done.connect(self._on_sched_refreshed)
+        w.finished.connect(w.deleteLater)
+        w.start()
+
+    def _on_sched_refreshed(self, registered, st):
+        self._sched_worker = None
+        if registered is not None:
+            self._registered_plans = registered
+            self._refresh_task_columns()
+            self.refresh_plan_task_state()
+        if st is not None:
+            self.sched_group.set_state(st)
+        if self._sched_pending:
+            self._sched_pending = False
+            self._sched_refresh_async()
+
+    def _refresh_task_columns(self):
+        """后台刷新完成后更新计划表格的任务列（避免整表重建丢选择/滚动）。"""
+        if not self._app_id:
+            return
+        for row in range(len(self._plans)):
+            plan = self._plans[row]
+            registered = plan.id in self._registered_plans
+            task_text = _("已注册") if registered else _("未注册")
+            item = self.plan_table.item(row, len(_plan_cols()) - 1)
+            if item is None:
+                continue
+            item.setText(task_text)
+            try:
+                from .. import scheduler as sched
+                task_name = sched.plan_task_name(self._app_id or "", plan.id)
+            except Exception:
+                task_name = ""
+            from . import theme
+            item.setForeground(QBrush(theme.status_color("ok")
+                                      if registered else QColor("#9aa4b1")))
+            item.setToolTip(task_name)
 
     def refresh_plan_task_state(self):
         """按选中计划的注册状态更新按钮（用缓存，不起子进程）。"""
@@ -481,7 +534,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, _("提示"), _("请先选择一个计划"))
             return
         cfg = store.load_settings()
-        if sched.plan_status(cfg, self._app_id, plan.id) == "registered":
+        # 用后台缓存判断注册状态，避免 UI 线程同步查 schtasks（冷查询可达数秒）
+        if plan.id in self._registered_plans:
             err = sched.plan_uninstall(self._app_id, plan.id)
             if err:
                 QMessageBox.warning(self, _("计划任务"),
@@ -535,8 +589,7 @@ class MainWindow(QMainWindow):
         if fail:
             QMessageBox.warning(self, label,
                                 _("{fail} 个计划操作失败，详见日志").format(fail=fail))
-        self.refresh_apps()  # 刷新任务列与注册状态
-        self.sched_group.refresh_status()
+        self.refresh_apps()  # 刷新任务列与注册状态（后台查询）
         self.status_label.setText(
             _("完成") if not fail else _("完成，{fail} 个失败").format(fail=fail))
 
@@ -563,8 +616,8 @@ class MainWindow(QMainWindow):
             self.refresh_apps()
 
     def _import_app(self):
-        path, _ = QFileDialog.getOpenFileName(self, _("导入应用配置"), "",
-                                              _("配置 (*.json *.zip)"))
+        path, _filt = QFileDialog.getOpenFileName(self, _("导入应用配置"), "",
+                                                  _("配置 (*.json *.zip)"))
         if not path:
             return
         from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit
@@ -605,9 +658,9 @@ class MainWindow(QMainWindow):
         if not self._app_id:
             return
         stamp = datetime.now().strftime("%Y%m%d_%H%M")
-        path, _ = QFileDialog.getSaveFileName(self, _("导出应用配置"),
-                                              f"{self._app_id}_{stamp}.json",
-                                              _("JSON (*.json)"))
+        path, _filt = QFileDialog.getSaveFileName(self, _("导出应用配置"),
+                                                  f"{self._app_id}_{stamp}.json",
+                                                  _("JSON (*.json)"))
         if not path:
             return
         app = store.load_app(self._app_id)
@@ -617,9 +670,9 @@ class MainWindow(QMainWindow):
 
     def _export_all(self):
         stamp = datetime.now().strftime("%Y%m%d_%H%M")
-        path, _ = QFileDialog.getSaveFileName(self, _("导出全部应用配置"),
-                                              f"backupapp_export_{stamp}.zip",
-                                              _("ZIP (*.zip)"))
+        path, _filt = QFileDialog.getSaveFileName(self, _("导出全部应用配置"),
+                                                  f"backupapp_export_{stamp}.zip",
+                                                  _("ZIP (*.zip)"))
         if not path:
             return
         from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit
@@ -687,8 +740,8 @@ class MainWindow(QMainWindow):
             return
         from .. import scheduler as sched
         old_id = plan.id
-        was_registered = sched.plan_status(store.load_settings(), self._app_id,
-                                           old_id) == "registered"
+        # 用后台缓存判断注册状态：同步查 schtasks 冷查询可达数秒，会卡住编辑弹窗
+        was_registered = plan.id in self._registered_plans
         dlg = PlanDialog(app, plan=plan, parent=self)
         if dlg.exec() == QDialog.Accepted:
             dlg.plan()
@@ -832,8 +885,7 @@ class MainWindow(QMainWindow):
     def _on_worker_done(self, ok: int, total: int, label: str):
         self._log(_("—— {label} 完成：{ok}/{total} 成功 ——").format(
             label=label, ok=ok, total=total))
-        self.refresh_plans()
-        self.sched_group.refresh_status()
+        self.refresh_plans()  # 内部触发后台刷新任务注册状态
         self.status_label.setText(
             _("完成") if ok == total else _("完成 {ok}/{total}").format(ok=ok, total=total))
 
@@ -903,7 +955,7 @@ class MainWindow(QMainWindow):
         form.addRow(btns)
 
         def do_save():
-            path, _ = QFileDialog.getSaveFileName(
+            path, _filt = QFileDialog.getSaveFileName(
                 dlg, _("保存脚本"),
                 f"{app.id}_{plan.id}.{flavor.currentData()}",
                 _("脚本 (*.*)"))

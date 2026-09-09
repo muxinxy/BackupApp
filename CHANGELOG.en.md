@@ -3,6 +3,14 @@
 > This is the English version of CHANGELOG.md. The Chinese version is the authoritative source.
 > Chinese version: [CHANGELOG.md](CHANGELOG.md)
 
+## v1.1.3 (2026-09-09)
+
+- **Fixed slow startup / plan editing**: scheduled-task registration status is now queried on a background thread (`schtasks /query` cold queries can take seconds and used to freeze the UI); buttons and table read a cache instead of blocking
+- **Fixed white backgrounds in dark-theme dialogs**: light/dark themes now apply a QPalette consistent with the QSS; unstyled containers such as the plan dialog no longer fall back to the light palette
+- **Pre/post backup hooks support script files**: type a command directly or click Browse to pick a script file — `.bat`/`.cmd`/`.ps1` on Windows (ps1 runs via PowerShell), `.sh` on macOS/Linux (runs via sh)
+- **Fixed multiple unresponsive buttons**: Browse / Import / Export / Add File / Save Script dialogs were silently dead after the i18n refactor because the `_` variable shadowed the translation function; all fixed
+- **Compatibility fix**: `schtasks` output is decoded with the system ANSI codepage (`mbcs`) so task-status queries no longer crash under a UTF-8 environment
+
 ## v1.1.2 (2026-09-06)
 
 - **New architecture artifacts**: CI now builds 5 platform artifacts — Windows x64, macOS x64 / ARM64, Linux x64 / ARM64 (new native macOS ARM64 and Linux ARM64 builds)
