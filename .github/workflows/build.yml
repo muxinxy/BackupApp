@@ -34,9 +34,9 @@ jobs:
             ext: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -75,7 +75,7 @@ jobs:
             tar -czf ../${{ matrix.artifact }}.${{ matrix.ext }} backupapp
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.${{ matrix.ext }}
@@ -111,7 +111,7 @@ jobs:
 
       - name: release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ matrix.artifact }}.${{ matrix.ext }}
           body_path: release-notes.md
@@ -142,7 +142,7 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
       - name: import certificate + sign + notarize
@@ -179,7 +179,7 @@ jobs:
           done
       - name: release (signed)
         if: steps.check.outputs.ok == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/backupapp-macos-*-signed.zip
           append_body: true
