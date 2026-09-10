@@ -6,6 +6,7 @@
 import json
 import os
 import re
+import tempfile
 
 from platformdirs import user_data_dir
 
@@ -63,11 +64,37 @@ def _read_json(path: str) -> dict | None:
             return json.load(f)
     except FileNotFoundError:
         return None
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+        # 损坏/半截 JSON（崩溃或断电中途写入）不能让整个应用起不来：
+        # 记日志后当作"无数据"，由上层用默认值继续。
+        # 惰性导入：logging 模块反向依赖 store，顶层导入会成环。
+        from ..logging import get_logger
+        get_logger().error(
+            _("读取 {path} 失败（按无数据继续）: {err}").format(path=path, err=e))
+        return None
 
 
 def _write_json(path: str, data: dict) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    """原子写：同目录临时文件 + fsync + os.replace。
+
+    直接 open(path, "w") 会先截断再写，中途崩溃/断电会留下半截 JSON，
+    而 settings.json 与应用定义都在这些文件里，损坏后应用无法再启动。
+    """
+    d = os.path.dirname(path) or "."
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp_", dir=d)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ---- 应用 ----

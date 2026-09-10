@@ -10,6 +10,7 @@
 import os
 import subprocess
 import sys
+import tempfile
 
 from .. import logging
 from ..i18n import _
@@ -42,25 +43,90 @@ def _script_command(cmd: str) -> str:
     return cmd
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """结束钩子进程及其后代。
+
+    shell=True 时直接杀子进程只杀到 shell，脚本（bat/ps1/sh）拉起的孙进程会
+    变成孤儿继续跑。Windows 用 taskkill /T 杀整棵树，POSIX 用进程组。
+    """
+    if proc.poll() is not None:
+        return
+    try:
+        if sys.platform == "win32":
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, creationflags=flags, timeout=10)
+        else:
+            import os as _os
+            import signal as _signal
+            _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+    except Exception:
+        pass  # 尽力而为：杀不掉也要让上层拿到超时错误
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
+
+# 钩子输出上限：直接 PIPE + communicate() 会把全部输出缓存在内存，脚本刷屏
+# 可能吃满内存。改为写入临时文件（落盘而非内存），只读取尾部。
+_TAIL_BYTES = 64 * 1024
+
+
+def _read_tail(f) -> str:
+    """读取临时文件末尾 _TAIL_BYTES 字节并解码。
+
+    直接对文件对象 seek/read（TemporaryFile 的 .name 在 POSIX 下是整数 fd，
+    不能当路径打开）。
+    """
+    try:
+        f.flush()
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(max(0, size - _TAIL_BYTES))
+        data = f.read()
+    except (OSError, ValueError):
+        return ""
+    text = data.decode("utf-8", errors="replace")
+    return text if size <= _TAIL_BYTES else _("…（输出过长已截断）\n") + text
+
+
 def run_hook(cmd: str, timeout: int, plan_key: str, when: str) -> None:
     """执行钩子命令，失败抛 RuntimeError（含超时）。"""
     if not cmd.strip():
         return
+    kwargs = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    else:
+        kwargs["start_new_session"] = True  # 独立进程组，便于整组终止
+    out_f = tempfile.TemporaryFile()
+    err_f = tempfile.TemporaryFile()
     try:
-        r = subprocess.run(
-            _script_command(cmd), shell=True, timeout=timeout,
-            capture_output=True, text=True, encoding="utf-8", errors="replace")
-        if r.returncode != 0:
-            tail = (r.stdout or "").strip().splitlines()[-3:]
-            tail += (r.stderr or "").strip().splitlines()[-3:]
-            detail = "\n".join(line for line in tail if line) or _("无输出")
+        proc = subprocess.Popen(_script_command(cmd), shell=True,
+                                stdout=out_f, stderr=err_f, **kwargs)
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            raise RuntimeError(
+                _("{when}钩子执行超时（>{timeout}s）: {cmd}").format(
+                    when=when, timeout=timeout, cmd=cmd))
+        if proc.returncode != 0:
+            detail_lines = (_read_tail(out_f).strip().splitlines()[-3:]
+                            + _read_tail(err_f).strip().splitlines()[-3:])
+            detail = "\n".join(ln for ln in detail_lines if ln) or _("无输出")
             raise RuntimeError(
                 _("{when}钩子退出码 {code}:\n{detail}").format(
-                    when=when, code=r.returncode, detail=detail))
-        if r.stdout and r.stdout.strip():
+                    when=when, code=proc.returncode, detail=detail))
+        out = _read_tail(out_f).strip()
+        if out:
             logging.get_logger().info(_("[%s] %s钩子输出: %s"),
-                                      plan_key, when, r.stdout.strip()[-200:])
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            _("{when}钩子执行超时（>{timeout}s）: {cmd}").format(
-                when=when, timeout=timeout, cmd=cmd))
+                                      plan_key, when, out)
+    finally:
+        out_f.close()
+        err_f.close()

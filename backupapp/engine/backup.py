@@ -7,7 +7,7 @@ from datetime import datetime
 
 from .. import logging
 from ..i18n import _
-from ..storage import store
+from ..storage import lock, store
 from ..util import format_size
 from . import compress, hooks, link as linkmod, paths, retention
 
@@ -35,9 +35,50 @@ def _mk_progress(plan_key: str, cb):
     return _p
 
 
+def _self_inclusion_skips(srcs: list[str], dest: str, entry: str,
+                          plan_key: str) -> list[str]:
+    """计算打包时要跳过的路径，避免归档把自己读进去。
+
+    目标目录在源目录内时，历史备份会被再次打包进新备份，体积逐份翻倍。
+    因此默认把整个目标目录排除；但若某个源本身就在目标目录内（link 模式的
+    live/<app> 目录正是这种情况），就只能排除本次写入的条目，否则会把真正
+    要备份的数据一起排掉。
+    """
+    skip = [entry, entry + ".part"]
+    source_inside_dest = any(compress.is_within(s, dest) for s in srcs)
+    if source_inside_dest:
+        return skip
+    if any(compress.is_within(dest, s) for s in srcs):
+        logging.get_logger().warning(
+            _("[%s] 目标目录位于源目录内（%s），已自动排除目标目录本身以避免"
+              "备份自我包含"), plan_key, dest)
+        skip.append(dest)
+    return skip
+
+
 def run_plan(plan_key: str, progress=None) -> BackupResult:
-    """执行单个计划备份；progress(msg) 可选，每文件回调一次（供 GUI 实时显示）。"""
+    """执行单个计划备份；progress(msg) 可选，每文件回调一次（供 GUI 实时显示）。
+
+    加 DataLock：计划任务调用 CLI（backupapp backup）时不经过 GUI worker，
+    若不在此加锁会与手动备份并发写 apps/*.json 造成丢更新。DataLock 同线程
+    可重入，GUI worker 已持锁时这里的嵌套获取是空操作。
+    """
     start = time.time()
+    try:
+        with lock.DataLock(lock.lock_path()):
+            return _run_plan_locked(plan_key, progress, start)
+    except RuntimeError as e:
+        # 锁被其他进程占用：按失败结果返回，不抛给调用方
+        logging.get_logger().warning("backup skipped %s: %s", plan_key, e)
+        return BackupResult(False, plan_key, error=str(e),
+                            duration_s=time.time() - start)
+    except Exception as e:
+        logging.get_logger().error("backup failed %s: %s", plan_key, e)
+        return BackupResult(False, plan_key, error=str(e),
+                            duration_s=time.time() - start)
+
+
+def _run_plan_locked(plan_key: str, progress, start: float) -> BackupResult:
     try:
         pair = store.load_plan(*plan_key.split("/", 1))
         if not pair:
@@ -59,14 +100,18 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
         hooks.run_hook(plan.pre_cmd, plan.cmd_timeout, plan_key, _("备份前"))
 
         snapshot = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 同一秒内重复备份会算出同名条目并互相覆盖：冲突时逐秒前移
+        snapshot = retention.unique_snapshot(dest, app.id, snapshot)
         entry = retention.entry_path(dest, app.id, snapshot, plan.compress, plan.format)
+        skip = _self_inclusion_skips(srcs, dest, entry, plan_key)
         p = _mk_progress(plan_key, progress)
         if plan.compress:
             files, size = compress.create_archive(srcs, entry, plan.format,
                                                   plan.password, plan.exclude,
-                                                  progress=p)
+                                                  progress=p, skip_paths=skip)
         else:
-            files, size = compress.copy_tree(srcs, entry, plan.exclude, progress=p)
+            files, size = compress.copy_tree(srcs, entry, plan.exclude,
+                                             progress=p, skip_paths=skip)
         pruned = retention.prune(dest, app.id, plan.retention, plan.keep_monthly,
                                  plan.keep_yearly, plan.retention_unit)
 
@@ -101,12 +146,14 @@ def run_plan(plan_key: str, progress=None) -> BackupResult:
 
 
 def run_all(progress=None) -> list[BackupResult]:
+    """跑所有启用计划。整批持锁（同线程重入），避免与其他进程的备份交错。"""
     results = []
-    for app in store.list_apps():
-        for plan in app.plans:
-            if not plan.enabled:
-                continue
-            results.append(run_plan(f"{app.id}/{plan.id}", progress=progress))
+    with lock.DataLock(lock.lock_path()):
+        for app in store.list_apps():
+            for plan in app.plans:
+                if not plan.enabled:
+                    continue
+                results.append(run_plan(f"{app.id}/{plan.id}", progress=progress))
     return results
 
 
@@ -114,5 +161,6 @@ def run_app(app_id: str, progress=None) -> list[BackupResult]:
     app = store.load_app(app_id)
     if not app:
         raise ValueError(_("应用不存在: {app_id}").format(app_id=app_id))
-    return [run_plan(f"{app.id}/{p.id}", progress=progress)
-            for p in app.plans if p.enabled]
+    with lock.DataLock(lock.lock_path()):
+        return [run_plan(f"{app.id}/{p.id}", progress=progress)
+                for p in app.plans if p.enabled]

@@ -4,6 +4,7 @@
 按文件名排序即按时间排序，远程保留策略按此剪枝。
 """
 
+import logging
 import re
 import socket
 from abc import ABC, abstractmethod
@@ -50,6 +51,15 @@ class Uploader(ABC):
     def delete(self, remote_name: str) -> None:
         """删除远程文件（不存在时视为成功）。"""
 
+    def close(self) -> None:
+        """释放底层连接（持有长连接的实现需覆写）。"""
+
+    def __enter__(self) -> "Uploader":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
 
 def make_uploader(sb: SelfBackup) -> Uploader:
     from . import ftp, s3, sftp, webdav
@@ -65,15 +75,21 @@ def make_uploader(sb: SelfBackup) -> Uploader:
 
 
 def prune_remote(u: Uploader, keep: int) -> int:
-    """保留最近 keep 份远程备份，返回删除数。keep<=0 视为保留全部。"""
+    """保留最近 keep 份远程备份，返回删除数。keep<=0 视为保留全部。
+
+    按快照时间戳排序（不是整个文件名）：共享远程目录时设备名段不同，
+    按文件名排序会把新备份误判为旧备份而删掉。
+    """
+    from ..engine.retention import snapshot_key
     if keep <= 0:
         return 0
-    files = sorted(u.list(), key=lambda f: f.name, reverse=True)
+    files = sorted(u.list(), key=lambda f: snapshot_key(f.name), reverse=True)
     removed = 0
     for f in files[keep:]:
         try:
             u.delete(f.name)
             removed += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logging.get_logger().warning(
+                _("删除远程旧备份失败 {name}: {err}").format(name=f.name, err=e))
     return removed
