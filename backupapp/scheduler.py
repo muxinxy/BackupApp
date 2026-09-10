@@ -236,8 +236,12 @@ def _write_crontab(lines: list[str]) -> bool:
     kwargs = {}
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    r = subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n",
-                       capture_output=True, text=True, **kwargs)
+    try:
+        # 与 _run 一致加超时：crontab 挂住时不能无限等待（调用方在后台线程里）
+        r = subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n",
+                           capture_output=True, text=True, timeout=20, **kwargs)
+    except subprocess.TimeoutExpired:
+        return False
     return r.returncode == 0
 
 
@@ -308,13 +312,33 @@ def uninstall(cfg) -> str:
     return err
 
 
+def _norm_cmd(s: str) -> str:
+    """规范化命令串用于比对。
+
+    schtasks 存储/回读 /tr 时会丢掉前导引号（实测：注册 '"{exe}" backup --all'
+    回读为 '{exe}" backup --all"'），逐字比较永远不相等，界面就会一直报
+    "路径变更，需重新应用"。比对时去掉所有引号并压缩空白。
+    """
+    return re.sub(r"\s+", " ", (s or "").replace('"', " ")).strip()
+
+
+def _cmd_matches(expected: str, actual: str) -> bool:
+    """actual 是否对应该命令（容忍引号/空白差异）。
+
+    用子串而非相等：某些系统会在"要运行的任务"里附加额外内容，相等比较会
+    误报 pathMismatch，而误报正是要修掉的问题。
+    """
+    actual_n = _norm_cmd(actual)
+    return bool(actual_n) and _norm_cmd(expected) in actual_n
+
+
 def status(cfg) -> str:
     """全局任务状态：registered / pathMismatch / missing。"""
     cmd = app_command(cfg)
     table = _tasks_table()
     if TASK_NAME not in table:
         return "missing"
-    if sys.platform == "win32" and cmd not in table[TASK_NAME]:
+    if sys.platform == "win32" and not _cmd_matches(cmd, table[TASK_NAME]):
         return "pathMismatch"
     return "registered"
 
@@ -343,7 +367,7 @@ def plan_status(cfg, app_id: str, plan_id: str) -> str:
     name = plan_task_name(app_id, plan_id)
     if name not in table:
         return "missing"
-    if sys.platform == "win32" and cmd not in table[name]:
+    if sys.platform == "win32" and not _cmd_matches(cmd, table[name]):
         return "pathMismatch"
     return "registered"
 

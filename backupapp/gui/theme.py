@@ -110,6 +110,23 @@ QPushButton#danger {
     color: #ffffff;
 }
 QCheckBox { spacing: 6px; }
+/* 复选框指示器：Fusion 默认绘制在暗黑配色下与背景几乎同色（实测对比度仅 5），
+   必须显式给边框/底色，否则未勾选的框线看不见。配色在 LIGHT/DARK 里给。 */
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+}
+QCheckBox::indicator:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    border-color: #2563eb;
+    image: url({{ICONS}}/check_white.png);
+}
+QCheckBox::indicator:disabled {
+    background: transparent;
+    border-color: palette(mid);
+}
 QStatusBar {
     border-top: 1px solid;
 }
@@ -257,6 +274,10 @@ QListWidget::item:selected { background: #dbeafe; color: #1e40af; }
 QListWidget::item:hover { background: #f1f5fb; }
 QMessageBox, QFileDialog { background: #eef2f7; }
 QScrollBar::handle:vertical, QScrollBar::handle:horizontal { background: #c9d2e0; }
+QCheckBox::indicator {
+    border: 1px solid #94a3b8;
+    background: #ffffff;
+}
 """
 
 DARK = _COMMON + """
@@ -362,6 +383,15 @@ QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed {
 QSpinBox:disabled, QTimeEdit:disabled {
     color: #475569;
     border-color: #334155;
+}
+/* 暗黑下指示器用中灰边框 + 深底：与 #0f172a 背景形成足够对比，未勾选也看得清 */
+QCheckBox::indicator {
+    border: 1px solid #7c8ba1;
+    background: #0f172a;
+}
+QCheckBox::indicator:hover {
+    border-color: #94a3b8;
+    background: #1e293b;
 }
 """
 

@@ -299,10 +299,10 @@ class SchedulerGroup(QGroupBox):
                 t = f"{h:02d}:{m:02d}"
                 self._time.addItem(t, t)
         self._time.setCurrentIndex(self._time.findData(cur))
-        # 周几：下拉选择
+        # 周几：下拉选择（与计划对话框一致，走翻译）
         self._day = QComboBox()
         for d in range(1, 8):
-            self._day.addItem(f"周{'一二三四五六日'[d - 1]}", d)
+            self._day.addItem(_("周{day}").format(day="一二三四五六日"[d - 1]), d)
         self._day.setCurrentIndex(s.day_of_week - 1 if 1 <= s.day_of_week <= 7 else 0)
         self._apply = QPushButton(_("注册"))
         self._apply.clicked.connect(self._apply_clicked)
@@ -332,6 +332,8 @@ class SchedulerGroup(QGroupBox):
         self.set_state(None)
         # 注册/取消注册后的状态由主窗口后台刷新（回调），避免界面内再起子进程
         self.after_change = None
+        # 注册/取消注册的执行入口，由主窗口注入（后台 worker）；None 时同步兜底
+        self.apply_task = None
 
     def _sync(self):
         f = self._freq.currentData()
@@ -363,28 +365,25 @@ class SchedulerGroup(QGroupBox):
         store.save_settings(cfg)
 
     def _apply_clicked(self):
-        """点击注册/取消注册操作系统任务（按当前显示的注册状态切换）。"""
+        """点击注册/取消注册操作系统任务（按当前显示的注册状态切换）。
+
+        schtasks 子进程冷缓存可达数秒，不能在 UI 线程同步执行：委托主窗口的
+        worker 管理器后台执行（apply_task 回调），结果回来后由主窗口统一刷新。
+        """
         cfg = store.load_settings()
         self._read_form(cfg)
-        if self._st == "registered":
-            err = sched.uninstall(cfg)
+        op = "global_uninstall" if self._st == "registered" else "global_install"
+        self._st = None
+        self.set_state(None)  # 状态未知，等后台刷新
+        if self.apply_task:
+            self.apply_task([(op, "", "")])
+        else:  # 独立使用时无主窗口可委托：同步执行（仅测试/兜底）
+            err = sched.uninstall(cfg) if op == "global_uninstall" else sched.install(cfg)
             if err:
                 QMessageBox.warning(self, _("计划任务"),
-                                    _("取消注册失败：{err}").format(err=err))
-            else:
-                self._st = None
-        else:
-            err = sched.install(cfg)
-            if err:
-                QMessageBox.warning(self, _("计划任务"),
-                                    _("注册失败：{err}").format(err=err))
-            else:
-                self._st = None
-        # 注册/注销后状态未知，交给主窗口后台刷新（本组件不直接查询系统）
-        if self._st is None:
-            self.set_state(None)
-        if self.after_change:
-            self.after_change()
+                                    _("操作失败：{err}").format(err=err))
+            if self.after_change:
+                self.after_change()
 
 
 class SelfBackupFilesDialog(QDialog):
@@ -451,21 +450,34 @@ class SelfBackupFilesDialog(QDialog):
         lay.addWidget(self._busy_bar)
 
         self._workers: list = []
+        self._busy = False  # 增删改查进行中：避免重复起 worker
         self._refresh()
 
     # ---- 列表 ----
 
     def _refresh(self):
         from .workers import SelfListWorker
+        # 单飞：切换协议或连点刷新时旧请求可能仍在途，并发会让后到的结果覆盖
+        # 新协议的数据。注意不能用 isRunning() 判断——本方法也会从恢复/删除的
+        # 完成回调里调用，那时对应 worker 的 run() 可能尚未返回。
+        if self._busy:
+            return
+        self._busy = True
         self._table.setRowCount(0)
         self._status.setText(_("加载中..."))
-        self._btn_refresh.setEnabled(False)
-        w = SelfListWorker(self._protocol.currentText(), self)
+        self._set_busy(True)
+        protocol = self._protocol.currentText()
+        w = SelfListWorker(protocol, self)
         self._workers.append(w)
 
         def _done(files, err: str):
-            self._btn_refresh.setEnabled(True)
-            self._workers.remove(w)
+            if w in self._workers:
+                self._workers.remove(w)
+            self._busy = False
+            self._set_busy(False)
+            # 结果回来时协议可能已经切走：丢弃过期响应
+            if self._protocol.currentText() != protocol:
+                return
             if err:
                 self._status.setText(_("加载失败: {err}").format(err=err))
                 return
@@ -475,6 +487,16 @@ class SelfBackupFilesDialog(QDialog):
         w.done.connect(_done)
         w.finished.connect(w.deleteLater)
         w.start()
+
+    def closeEvent(self, event):
+        """关闭时等待在途的列表/恢复/删除 worker，避免 QThread 运行中被销毁。"""
+        for w in list(self._workers):
+            if w.isRunning():
+                w.requestInterruption()
+                if not w.wait(10000):
+                    w.terminate()
+                    w.wait(1000)
+        super().closeEvent(event)
 
     def _populate(self, files):
         from ..protocols.base import RemoteFile  # noqa: F401 (类型提示)
@@ -499,7 +521,9 @@ class SelfBackupFilesDialog(QDialog):
 
     # ---- 操作 ----
 
-    def _restore_selected(self, *_):
+    def _restore_selected(self, *_args):
+        if self._busy:
+            return  # 已有请求在途，忽略重复触发
         name = self._selected_name()
         if not name:
             QMessageBox.information(self, _("恢复"), _("请先选择一个备份文件"))
@@ -520,13 +544,16 @@ class SelfBackupFilesDialog(QDialog):
         overwrite = box.clickedButton() is overwrite_btn
         from .workers import SelfRestoreWorker
         proto = self._protocol.currentText()
+        self._busy = True
         self._set_busy(True)
         w = SelfRestoreWorker(proto, name, overwrite, self)
         self._workers.append(w)
 
         def _done(ok: bool, msg: str):
+            self._busy = False
             self._set_busy(False)
-            self._workers.remove(w)
+            if w in self._workers:
+                self._workers.remove(w)
             if ok:
                 QMessageBox.information(self, _("恢复"),
                                         _("恢复成功：{msg}").format(msg=msg))
@@ -540,6 +567,8 @@ class SelfBackupFilesDialog(QDialog):
         w.start()
 
     def _delete_selected(self):
+        if self._busy:
+            return  # 已有请求在途，忽略重复触发
         name = self._selected_name()
         if not name:
             QMessageBox.information(self, _("删除"), _("请先选择一个备份文件"))
@@ -550,13 +579,16 @@ class SelfBackupFilesDialog(QDialog):
             return
         from .workers import SelfDeleteWorker
         proto = self._protocol.currentText()
+        self._busy = True
         self._set_busy(True)
         w = SelfDeleteWorker(proto, name, self)
         self._workers.append(w)
 
         def _done(ok: bool, msg: str):
+            self._busy = False
             self._set_busy(False)
-            self._workers.remove(w)
+            if w in self._workers:
+                self._workers.remove(w)
             if ok:
                 self._status.setText(msg)
                 self._refresh()
@@ -572,6 +604,9 @@ class SelfBackupFilesDialog(QDialog):
         for b in (self._btn_refresh, self._btn_restore, self._btn_delete,
                   self._protocol):
             b.setEnabled(not busy)
+        # 表格也要禁用：它的 doubleClicked 仍连着 _restore_selected，
+        # 恢复/删除进行中再双击会起第二个 worker（并发覆盖同一份数据）。
+        self._table.setEnabled(not busy)
         # 进行中显示不定进度动画（右下角状态栏同样由主窗口 busy_bar 呈现）
         self._busy_bar.setVisible(busy)
         if busy:
