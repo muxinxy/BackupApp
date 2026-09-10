@@ -30,6 +30,7 @@ class DavHandler(BaseHTTPRequestHandler):
     """
 
     files: dict[str, bytes] = {}
+    counts: dict[str, int] = {}  # 方法 -> 请求次数（验证 _ensure_dir 缓存/连接复用）
 
     def _send(self, code: int, body: bytes = b"", ctype: str = "text/xml"):
         self.send_response(code)
@@ -39,6 +40,7 @@ class DavHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_PROPFIND(self):
+        self.counts["PROPFIND"] = self.counts.get("PROPFIND", 0) + 1
         import urllib.parse
         body = b'<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         for name in sorted(self.files):
@@ -55,11 +57,13 @@ class DavHandler(BaseHTTPRequestHandler):
         self._send(207, body)
 
     def do_PUT(self):
+        self.counts["PUT"] = self.counts.get("PUT", 0) + 1
         n = int(self.headers.get("Content-Length", 0))
         self.files[self.path.strip("/")] = self.rfile.read(n)
         self._send(201)
 
     def do_GET(self):
+        self.counts["GET"] = self.counts.get("GET", 0) + 1
         name = self.path.strip("/")
         if name in self.files:
             self._send(200, self.files[name], ctype="application/octet-stream")
@@ -142,6 +146,28 @@ def main() -> None:
     assert len(files_after) == 1, f"删除后数量异常: {len(files_after)}"
     print(f"delete(): {f0.name} -> {len(files_after)} remaining")
 
+    # 流式下载 + _ensure_dir 缓存：一次上传只需 1 次 PROPFIND（缓存后不再重复
+    # 探测每个路径段），下载走 iter_bytes 但内容必须完整。
+    DavHandler.counts.clear()
+    up = make_uploader(sb)
+    payload = os.path.join(tmp, "payload.bin")
+    blob = os.urandom(3 * 1024 * 1024 + 12345)  # 跨多个 64KiB chunk
+    with open(payload, "wb") as f:
+        f.write(blob)
+    up.upload(payload, "backupapp_probe_20260910_000000.zip")
+    assert DavHandler.counts.get("PROPFIND", 0) == 1, \
+        f"_ensure_dir 未缓存，PROPFIND={DavHandler.counts.get('PROPFIND')}"
+    back = os.path.join(tmp, "payload_back.bin")
+    up.download("backupapp_probe_20260910_000000.zip", back)
+    with open(back, "rb") as f:
+        assert f.read() == blob, "流式下载内容不一致"
+    # 同实例第二次上传：目录已缓存，不应再发 PROPFIND
+    up.upload(payload, "backupapp_probe2_20260910_000000.zip")
+    assert DavHandler.counts.get("PROPFIND", 0) == 1, \
+        f"复用实例后仍重复 PROPFIND: {DavHandler.counts.get('PROPFIND')}"
+    up.close()
+    print(f"stream download + ensure_dir cache ok (PROPFIND={DavHandler.counts['PROPFIND']})")
+
     # 多协议配置独立：S3 配置不影响 webdav
     cfg = store.load_settings()
     sb3 = cfg.sb("s3")
@@ -158,6 +184,92 @@ def main() -> None:
     ok3, msg3 = make_uploader(sb3).test()
     assert ok3 is False and isinstance(msg3, str), f"s3 错误路径异常: {ok3} {msg3}"
     print(f"s3 error path ok: {msg3[:60]}")
+
+    # FTP 降级判定：仅 TLS 协商失败才降级明文，认证失败/网络错误必须照抛
+    from ftplib import error_perm as _error_perm
+    from backupapp.protocols import ftp as _ftp
+
+    class _FakeTLS:
+        """可编程的 FTP_TLS 替身：按阶段模拟失败。
+
+        ftplib 的 FTP_TLS.connect() 内部完成 AUTH TLS，因此 TLS 不支持表现为
+        connect 抛错；认证失败表现为 login 抛错（两者都是 error_perm）。
+        """
+        fail_with = None
+
+        def connect(self, host, port, timeout=None):
+            if self.fail_with == "connect":
+                raise OSError("network down")
+            if self.fail_with == "tls_perm":
+                raise _error_perm("550 TLS config not available")
+
+        def login(self, user, pw):
+            if self.fail_with == "auth":
+                raise _error_perm("530 Login incorrect")
+
+        def prot_p(self):
+            pass
+
+        def close(self):
+            pass
+
+    class _FakePlain:
+        """降级后的明文连接：总是成功（用于验证是否发生了降级）。"""
+
+        def connect(self, host, port, timeout=None):
+            pass
+
+        def login(self, user, pw):
+            pass
+
+        def close(self):
+            pass
+
+    made = []
+
+    def _make_plain():
+        f = _FakePlain()
+        made.append(f)
+        return f
+
+    orig_tls, orig_plain = _ftp.FTP_TLS, _ftp.FTP
+    _ftp.FTP_TLS = _FakeTLS
+    _ftp.FTP = _make_plain
+    try:
+        sb_ftp = _ftp.FTPUploader.__new__(_ftp.FTPUploader)
+        sb_ftp.host, sb_ftp.port, sb_ftp.user, sb_ftp.pw = "h", 21, "u", "p"
+        sb_ftp.path, sb_ftp.tls, sb_ftp.timeout = "", True, 5
+
+        # TLS 协商被服务器拒绝 -> 降级明文（_login 用伪造的 FTP）
+        _FakeTLS.fail_with = "tls_perm"
+        made.clear()
+        sb_ftp._connect()
+        assert made, "TLS 被拒绝时应降级到明文 FTP"
+
+        # 认证失败 -> 必须抛 error_perm，不得降级明文
+        _FakeTLS.fail_with = "auth"
+        made.clear()
+        try:
+            sb_ftp._connect()
+        except _error_perm:
+            pass
+        else:
+            raise AssertionError("认证失败不得降级明文")
+        assert not made, "认证失败时不应新建明文连接"
+
+        # 网络错误 -> 同样不得降级
+        _FakeTLS.fail_with = "connect"
+        made.clear()
+        try:
+            sb_ftp._connect()
+        except OSError:
+            pass
+        else:
+            raise AssertionError("网络错误不得降级明文")
+        assert not made, "网络错误时不应新建明文连接"
+    finally:
+        _ftp.FTP_TLS, _ftp.FTP = orig_tls, orig_plain
+    print("ftp tls fallback policy ok")
 
     # CLI 接线：独立进程跑 self-backup / self-list
     env = dict(os.environ)
@@ -179,6 +291,41 @@ def main() -> None:
     assert cli_list.returncode == 0 and "backupapp_" in cli_list.stdout, \
         f"CLI self-list 失败: {cli_list.stderr} {cli_list.stdout}"
     print(f"CLI self-list ok ({len(cli_list.stdout.strip().splitlines())} files)")
+
+    # 多协议复用产物：同 (格式, 密码) 的协议共享一次打包。
+    # 直接对 _run_one 的分组缓存做单元验证（共享 artifacts 字典 = 同一批运行）。
+    from backupapp.protocols import runner as _runner
+    calls = {"n": 0}
+    _orig_build = _runner._build_archive
+
+    def _counting_build(sb):
+        calls["n"] += 1
+        return _orig_build(sb)
+
+    import copy as _copy
+    cfg = store.load_settings()
+    sb.local_copy = False
+    sb.retention = 0
+    sb_a = cfg.sb("webdav")
+    sb_a.host, sb_a.remote_path = base_url, "/backups_a"
+    sb_a.format, sb_a.archive_password = "zip", ""
+    sb_b = _copy.deepcopy(sb_a)
+    sb_b.remote_path = "/backups_b"  # 第二个目标，同格式同密码
+
+    _runner._build_archive = _counting_build
+    try:
+        artifacts, temp_created = {}, []
+        calls["n"] = 0
+        r1 = _runner._run_one(sb_a, artifacts, temp_created)
+        r2 = _runner._run_one(sb_b, artifacts, temp_created)
+        assert r1.ok and r2.ok, (r1.error, r2.error)
+        assert calls["n"] == 1, f"同组协议应只打包一次，实际 {calls['n']} 次"
+        assert r1.files == 2, f"文件数应为 apps+settings，实际 {r1.files}"
+        # 两个目标都应收到备份
+        assert DavHandler.counts.get("PUT", 0) >= 2
+        print(f"artifact reuse: packed {calls['n']}x for 2 protocols")
+    finally:
+        _runner._build_archive = _orig_build
 
     srv.shutdown()
     shutil.rmtree(tmp, ignore_errors=True)

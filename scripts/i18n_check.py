@@ -13,6 +13,10 @@ Checks:
   C  no bare Chinese: no CJK string literal outside _() / docstrings / # i18n:data dicts
   D  placeholder parity: {token} sets of key and translation are identical
   E  forbidden _(f"...") f-string calls
+  F  forbidden `_` rebinding: `_` is the translation function, so binding it
+     (parameter, assignment/unpacking target, `for _ in`, `with ... as _`,
+     `except ... as _`, `import ... as _`, walrus, global/nonlocal) silently
+     turns later `_("...")` calls into calls on that value
 """
 import ast
 import pathlib
@@ -92,6 +96,28 @@ def _placeholders(s):
     return set(PLACEHOLDER.findall(s))
 
 
+def _underscore_bindings(tree):
+    """Check F: every place where the name `_` is bound (not merely read).
+
+    Returns a list of (lineno, kind) so the error can name the construct.
+    """
+    found = []
+    for node in ast.walk(tree):
+        # assignment / unpacking / for / comprehension / with-as / walrus targets
+        if isinstance(node, ast.Name) and node.id == "_" \
+                and isinstance(node.ctx, ast.Store):
+            found.append((node.lineno, "assignment target"))
+        elif isinstance(node, ast.arg) and node.arg == "_":
+            found.append((node.lineno, "parameter"))
+        elif isinstance(node, ast.ExceptHandler) and node.name == "_":
+            found.append((node.lineno, "except handler"))
+        elif isinstance(node, ast.alias) and node.asname == "_":
+            found.append((node.lineno, "import alias"))
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) and "_" in node.names:
+            found.append((node.lineno, "global/nonlocal declaration"))
+    return found
+
+
 def _load_catalog():
     """Load MESSAGES from en.py without importing the package (pure data file)."""
     ns = {}
@@ -134,6 +160,10 @@ def _analyze_file(path):
             pass
         else:
             errors.append(f"{path}:{node.lineno}: _() first argument must be a string literal")
+
+    for lineno, kind in _underscore_bindings(tree):
+        errors.append(f"{path}:{lineno}: `_` must not be bound ({kind}) - it is the "
+                      f"translation function; use `_args`/`_i`/`_unused` instead")
 
     bare = []
     for node in ast.walk(tree):
@@ -210,6 +240,15 @@ def cmd_selfcheck():
         print(f"skip _FREQ_REV round-trip (PySide6 unavailable): {e}")
     else:
         assert _FREQ_REV["每天"] == "daily"
+    # Check F logic: `_` rebinding detector
+    def _kinds(src):
+        return {kind for _, kind in _underscore_bindings(ast.parse(src))}
+    assert _kinds("def f(self, *_):\n    pass\n") == {"parameter"}
+    assert _kinds("for full, _ in x:\n    pass\n") == {"assignment target"}
+    assert _kinds("try:\n    pass\nexcept E as _:\n    pass\n") == {"except handler"}
+    assert _kinds("import os as _\n") == {"import alias"}
+    assert _kinds("a, _ = f()\n") == {"assignment target"}
+    assert _kinds("print(_('a'))\n") == set()  # a plain call is not a binding
     print("selfcheck OK")
     return 0
 

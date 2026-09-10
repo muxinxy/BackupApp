@@ -53,23 +53,30 @@ def main() -> None:
     print("[ok] plain_sb/secrets keyring")
 
     # --- 多源脚本生成 ---
+    # generate(app, plan, flavor)：flavor = sh | ps1 | bat（脚本为备份+恢复一体）
     app = AppConfig(id="multi", name="Multi")
     plan = BackupPlan(
         id="cfg", name="cfg", compress=True, format="zip", password="p@ss'word",
         sources=["C:/Users/foo/AppData/Roaming/App1", "C:/Users/foo/.config/app2"],
         destination="D:/Backups/multi")
-    sh = generator.generate(app, plan, "backup", "sh")
-    assert "C:/Users/foo/AppData/Roaming/App1" in sh and "app2" in sh
-    assert "-C" in sh, "sh 多源 -C 参数缺失"
-    assert "PW='p@ss'\\''word'" in sh, f"sh 密码转义错误: {sh[sh.find('PW='):sh.find(chr(10), sh.find('PW='))]}"
+    sh = generator.generate(app, plan, "sh")
+    # zip 逐源归档：每个源各自 cd 到父目录再打包 basename，避免绝对路径进包内
+    assert '(cd "C:/Users/foo/AppData/Roaming" && $ZIP "$OUT" "App1")' in sh, \
+        f"sh 多源 zip 归档块缺失:\n{sh}"
+    assert '(cd "C:/Users/foo/.config" && $ZIP "$OUT" "app2")' in sh
+    # tar.gz 回退路径用 -C 逐源打包
+    assert '-C "C:/Users/foo/AppData/Roaming" "App1"' in sh, "sh 多源 -C 参数缺失"
+    # 单引号密码必须转义成 '\'' 形式
+    assert "PW='p@ss'\\''word'" in sh, \
+        f"sh 密码转义错误: {sh[sh.find('PW='):sh.find(chr(10), sh.find('PW='))]}"
     print("[ok] sh multi-source + password")
 
-    ps = generator.generate(app, plan, "backup", "ps1")
+    ps = generator.generate(app, plan, "ps1")
     assert '"C:/Users/foo/AppData/Roaming/App1",' in ps
-    assert '"C:/Users/foo/.config/app2",' in ps
+    assert '"C:/Users/foo/.config/app2"' in ps
     print("[ok] ps1 multi-source array")
 
-    bat = generator.generate(app, plan, "backup", "bat")
+    bat = generator.generate(app, plan, "bat")
     assert 'robocopy "C:/Users/foo/AppData/Roaming/App1" "%DEST%\\%APP%_%TS%\\App1"' in bat
     assert 'robocopy "C:/Users/foo/.config/app2" "%DEST%\\%APP%_%TS%\\app2"' in bat
     print("[ok] bat multi-source robocopy block")
@@ -77,8 +84,8 @@ def main() -> None:
     # 单源保持原行为
     plan2 = BackupPlan(id="p2", name="p2", compress=False, format="zip", password="",
                        sources=["~/cfg"], destination="~/bk")
-    sh2 = generator.generate(app, plan2, "backup", "sh")
-    assert 'cp -a "~/cfg"' in sh2 or '"~/cfg"' in sh2
+    sh2 = generator.generate(app, plan2, "sh")
+    assert 'cp -a "~/cfg" "$DEST/${APP}_${TS}"' in sh2
     print("[ok] single-source no-compress")
 
     print("SECURITY + SCRIPT SMOKE ALL PASS")
