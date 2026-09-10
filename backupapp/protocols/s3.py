@@ -16,6 +16,7 @@ class S3Uploader(Uploader):
         if not sb.bucket:
             raise ValueError(_("S3 未配置 bucket"))
         import boto3
+        from botocore.config import Config
         kwargs = {
             "aws_access_key_id": sb.username or None,
             "aws_secret_access_key": sb.password or None,
@@ -24,13 +25,25 @@ class S3Uploader(Uploader):
         if sb.endpoint:
             kwargs["endpoint_url"] = sb.endpoint
         self.client = boto3.client("s3", **kwargs,
-                                   config=__import__("botocore").config.Config(
+                                   config=Config(
                                        connect_timeout=sb.timeout or 10,
                                        read_timeout=sb.timeout or 10,
                                        retries={"max_attempts": 2}))
         self.bucket = sb.bucket
         self.prefix = sb.remote_path.strip("/")
         self.timeout = sb.timeout or 10
+        self._http = None  # 下载复用的 httpx.Client（惰性创建）
+
+    def _http_client(self):
+        if self._http is None:
+            import httpx
+            self._http = httpx.Client(follow_redirects=True, timeout=self.timeout)
+        return self._http
+
+    def close(self) -> None:
+        if self._http is not None:
+            self._http.close()
+            self._http = None
 
     def _key(self, name: str = "") -> str:
         return f"{self.prefix}/{name}" if name else self.prefix
@@ -46,18 +59,20 @@ class S3Uploader(Uploader):
         self.client.upload_file(local_path, self.bucket, self._key(remote_name))
 
     def download(self, remote_name: str, local_path: str) -> None:
-        import httpx
+        # 流式下载：归档可能 GB 级，整包读进内存会 OOM
         url = self.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.bucket, "Key": self._key(remote_name)},
-            ExpiresIn=300)
-        r = httpx.get(url, follow_redirects=True, timeout=self.timeout)
-        if r.status_code != 200:
-            raise RuntimeError(
-                _("下载失败: HTTP {status} {body}").format(
-                    status=r.status_code, body=r.text[:200]))
-        with open(local_path, "wb") as f:
-            f.write(r.content)
+            ExpiresIn=3600)
+        with self._http_client().stream("GET", url) as r:
+            if r.status_code != 200:
+                r.read()
+                raise RuntimeError(
+                    _("下载失败: HTTP {status} {body}").format(
+                        status=r.status_code, body=r.text[:200]))
+            with open(local_path, "wb") as f:
+                for chunk in r.iter_bytes(chunk_size=1 << 16):
+                    f.write(chunk)
 
     def list(self) -> list[RemoteFile]:
         out = []

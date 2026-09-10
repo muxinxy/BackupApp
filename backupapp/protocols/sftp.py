@@ -3,6 +3,7 @@
 远程路径统一用绝对路径（/bequest），避免相对路径与 cwd 叠加歧义。
 """
 
+import contextlib
 import posixpath
 from datetime import datetime
 
@@ -24,11 +25,24 @@ class SFTPUploader(Uploader):
         self.path = sb.remote_path.strip("/")
         self.timeout = sb.timeout or 10
 
-    def _connect(self) -> paramiko.SFTPClient:
+    @contextlib.contextmanager
+    def _session(self):
+        """建立一个 SFTP 会话并保证 SSH transport 一并关闭。
+
+        SFTPClient.close() 只关 SFTP 通道，底层 transport/socket 要等 GC 才关；
+        每次 list/upload/delete 都新建连接，不显式关闭会累积 TCP 会话。
+        """
         t = paramiko.Transport((self.host, self.port))
-        t.banner_timeout = self.timeout
-        t.connect(username=self.user, password=self.pw)
-        return paramiko.SFTPClient.from_transport(t)
+        try:
+            t.banner_timeout = self.timeout
+            t.connect(username=self.user, password=self.pw)
+            sftp = paramiko.SFTPClient.from_transport(t)
+            try:
+                yield sftp
+            finally:
+                sftp.close()
+        finally:
+            t.close()
 
     def _remote(self, name: str = "") -> str:
         """绝对路径：/bequest 或 /bequest/name。"""
@@ -37,7 +51,7 @@ class SFTPUploader(Uploader):
 
     def test(self) -> tuple[bool, str]:
         try:
-            with self._connect() as sftp:
+            with self._session() as sftp:
                 sftp.listdir(self._remote())
             return True, _("连接成功")
         except Exception as e:
@@ -55,7 +69,7 @@ class SFTPUploader(Uploader):
                 sftp.mkdir(cur)
 
     def upload(self, local_path: str, remote_name: str) -> None:
-        with self._connect() as sftp:
+        with self._session() as sftp:
             if self.path:
                 self._ensure_dir(sftp)
             # 用 open().write() 流式上传：部分 SFTP 网关（如本站点）不支持
@@ -69,7 +83,7 @@ class SFTPUploader(Uploader):
                         rf.write(chunk)
 
     def download(self, remote_name: str, local_path: str) -> None:
-        with self._connect() as sftp:
+        with self._session() as sftp:
             # 同 upload：open().read() 流式下载，部分网关不支持 get()
             with sftp.open(self._remote(remote_name), "rb") as rf:
                 with open(local_path, "wb") as f:
@@ -80,7 +94,7 @@ class SFTPUploader(Uploader):
                         f.write(chunk)
 
     def list(self) -> list[RemoteFile]:
-        with self._connect() as sftp:
+        with self._session() as sftp:
             try:
                 attrs = sftp.listdir_attr(self._remote())
             except FileNotFoundError:
@@ -97,5 +111,5 @@ class SFTPUploader(Uploader):
             return out
 
     def delete(self, remote_name: str) -> None:
-        with self._connect() as sftp:
+        with self._session() as sftp:
             sftp.remove(self._remote(remote_name))

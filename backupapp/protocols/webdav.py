@@ -28,14 +28,26 @@ class WebDAVUploader(Uploader):
         self.path = sb.remote_path.strip("/")
         self.auth = (sb.username, sb.password) if sb.username else None
         self.timeout = sb.timeout or 10
+        # 复用单个 Client：模块级 httpx.request 每次都会新建连接池并重新
+        # TCP+TLS 握手，多文件备份时开销显著。
+        self._client = httpx.Client(auth=self.auth, timeout=self.timeout,
+                                    follow_redirects=True)
+        self._dir_ready = False  # _ensure_dir 只在实例内成功执行一次
+
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> "WebDAVUploader":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     def _url(self, name: str = "") -> str:
         return f"{self.base}/{self.path}/{name}" if name else f"{self.base}/{self.path}"
 
     def _req(self, method: str, url: str, **kw) -> httpx.Response:
-        kw.setdefault("follow_redirects", True)
-        kw.setdefault("timeout", self.timeout)
-        return httpx.request(method, url, auth=self.auth, **kw)
+        return self._client.request(method, url, **kw)
 
     def test(self) -> tuple[bool, str]:
         try:
@@ -46,7 +58,10 @@ class WebDAVUploader(Uploader):
             return False, str(e)
 
     def _ensure_dir(self):
+        if self._dir_ready:
+            return
         if self._req("PROPFIND", self._url()).status_code in (200, 207):
+            self._dir_ready = True
             return
         cur = self.base
         for part in self.path.split("/"):
@@ -55,6 +70,7 @@ class WebDAVUploader(Uploader):
             cur = f"{cur}/{part}"
             if self._req("PROPFIND", cur).status_code not in (200, 207):
                 self._req("MKCOL", cur)
+        self._dir_ready = True
 
     def upload(self, local_path: str, remote_name: str) -> None:
         self._ensure_dir()
@@ -66,13 +82,16 @@ class WebDAVUploader(Uploader):
                     status=r.status_code, body=r.text[:200]))
 
     def download(self, remote_name: str, local_path: str) -> None:
-        r = self._req("GET", self._url(remote_name))
-        if r.status_code not in (200, 206):
-            raise RuntimeError(
-                _("下载失败: HTTP {status} {body}").format(
-                    status=r.status_code, body=r.text[:200]))
-        with open(local_path, "wb") as f:
-            f.write(r.content)
+        # 流式下载：备份归档可能 GB 级，r.content 会把整包读进内存后 OOM
+        with self._client.stream("GET", self._url(remote_name)) as r:
+            if r.status_code not in (200, 206):
+                r.read()
+                raise RuntimeError(
+                    _("下载失败: HTTP {status} {body}").format(
+                        status=r.status_code, body=r.text[:200]))
+            with open(local_path, "wb") as f:
+                for chunk in r.iter_bytes(chunk_size=1 << 16):
+                    f.write(chunk)
 
     def list(self) -> list[RemoteFile]:
         r = self._req("PROPFIND", self._url(), headers={"Depth": "1"})

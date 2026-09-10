@@ -6,8 +6,9 @@ list() 优先 MLSD（自带大小/时间），不支持时回退 nlst + SIZE。
 """
 
 import logging
+import ssl
 from datetime import datetime
-from ftplib import FTP, FTP_TLS, error_perm
+from ftplib import FTP, FTP_TLS, error_perm, error_temp
 
 from ..i18n import _
 from ..model import SelfBackup
@@ -27,18 +28,41 @@ class FTPUploader(Uploader):
         self.timeout = sb.timeout or 10
 
     def _connect(self) -> FTP:
-        """连接并登录；use_ssl 时尝试 FTP_TLS，服务器不支持则降级普通 FTP。"""
+        """连接并登录；use_ssl 时尝试 FTP_TLS，仅当服务器不支持 TLS 时降级普通 FTP。
+
+        降级判定按阶段区分：ftplib 的 FTP_TLS.connect() 内部就完成 AUTH TLS，
+        因此只有 connect 阶段失败才说明"服务器不支持 TLS"。login/prot_p 阶段
+        失败（认证错误同样是 error_perm）必须照抛——否则密码会在本该加密的
+        连接上明文发送。
+        """
         if not self.tls:
             return self._login(FTP())
+        ftp = FTP_TLS()
         try:
-            ftp = FTP_TLS()
             ftp.connect(self.host, self.port, timeout=self.timeout)
+        except (error_perm, error_temp, ssl.SSLError) as e:
+            # AUTH TLS 被服务器拒绝/协商失败（如网关 550 TLS config）-> 降级明文
+            self._close_quietly(ftp)
+            logging.getLogger(__name__).warning(
+                "ftp server refused TLS (%s); falling back to plaintext", e)
+            return self._login(FTP())
+        except Exception:
+            self._close_quietly(ftp)
+            raise
+        try:
             ftp.login(self.user or "anonymous", self.pw)
             ftp.prot_p()
-            return ftp
         except Exception:
-            # 服务器无 TLS（如部分网关返回 550 TLS config），降级明文
-            return self._login(FTP())
+            self._close_quietly(ftp)
+            raise
+        return ftp
+
+    @staticmethod
+    def _close_quietly(ftp: FTP) -> None:
+        try:
+            ftp.close()
+        except Exception:
+            pass
 
     def _login(self, ftp: FTP) -> FTP:
         ftp.connect(self.host, self.port, timeout=self.timeout)
