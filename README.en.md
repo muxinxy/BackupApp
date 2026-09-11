@@ -31,7 +31,7 @@ scoop bucket add mxy https://github.com/muxinxy/scoop-bucket
 scoop install mxy/backupapp
 ```
 
-After installation, a **BackupApp** shortcut (GUI) appears in the Start menu; the command line provides `backupapp` (i.e. `backupapp-cli.exe`). Config and data are stored in `backupapp\data`, which is set to persist, so `scoop update` upgrades don't lose them. Registered scheduled tasks point at the `current` link and remain valid after upgrades (if the UI prompts "path changed, re-apply" after an upgrade, click "Register" once).
+After installation, a **BackupApp** shortcut (GUI) appears in the Start menu; the command line provides `backupapp` (i.e. `backupapp-cli.exe`). Config and data are stored in `backupapp\data`, which is set to persist, so `scoop update` upgrades don't lose them. Registered scheduled tasks point at the `current` link and remain valid after upgrades.
 
 ### Run from source
 
